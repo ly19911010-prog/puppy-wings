@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Puppy Wings v4.7.1 — og:image points to production vercel.app domain -->
+<!-- Puppy Wings v4.8 — og:image points to production vercel.app domain -->
 <!--
   Puppy Wings v4 — angel puppy protagonist + bone-catching bonus — a reskin of "flappy-modern" by mf4633 (https://github.com/mf4633/flappy-modern)
   Original licensed under the MIT License. This reskin keeps the same license.
@@ -10,6 +10,8 @@
   v4.4: player character is now the circular-cropped avatar (vector puppy kept as fallback).
   v4.5: avatar embedded as data URI (256px) so it renders in any preview; medal img has onerror fallback.
   v4.6: combo system (milestone bonus), invincible-star powerup, daily rewards + revive tickets, AdsGram rewarded-ad revive.
+  v4.7.1: BOT_TOKEN + AdsGram block wired for production; HMAC initData validation on /api/invoice.
+  v4.8: difficulty select (easy/normal/hard), reachable-gate constraint (no impossible jumps), gentle gate bobbing on normal/hard, cuter synthesized SFX.
 -->
 <html lang="en">
 <head>
@@ -381,6 +383,25 @@
       0 2px 0 #6d28d9,
       0 6px 16px rgba(168,85,247,.35);
   }
+  /* v4.8 difficulty selector */
+  .diff-row { display: flex; gap: 8px; margin: 4px 0 12px; }
+  .diff-row .diff {
+    padding: 10px 6px;
+    font-size: 15px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.08);
+    color: #cfd6ff;
+    text-shadow: none;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.14);
+  }
+  .diff-row .diff.on {
+    background: linear-gradient(180deg, #f5a3f0 0%, #a855f7 100%);
+    color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,.22);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.35),
+      0 4px 0 #6d28d9;
+  }
   button:disabled { opacity: .55; filter: saturate(.6); }
   button.telegram {
     background: linear-gradient(180deg, #8fdcff 0%, #38bdfd 60%, #0ea5e9 100%);
@@ -517,6 +538,11 @@
         <div class="mini-box"><div class="label">Best</div><div class="value" id="bestStart">0</div></div>
         <div class="mini-box"><div class="label">⭐ Stars</div><div class="value" id="coinStart" style="color:#ffd93a">0</div></div>
         <div class="mini-box"><div class="label">🎟️ Tickets</div><div class="value" id="ticketStart" style="color:#fcd34d">0</div></div>
+      </div>
+      <div class="diff-row">
+        <button class="diff" data-d="easy">😊 简单</button>
+        <button class="diff" data-d="normal">🙂 普通</button>
+        <button class="diff" data-d="hard">😈 困难</button>
       </div>
       <button id="startBtn">▶ &nbsp;Start</button>
       <button id="dailyBtn" class="ghost">🎁 每日奖励</button>
@@ -701,13 +727,40 @@
   const GRAVITY = 1400;      // px / s^2
   const FLAP_V = -430;       // px / s
   const MAX_VY = 800;
-  const SCROLL_V0 = 170;     // base gate speed
-  const SCROLL_VMAX = 300;
   const PIPE_W = 78;
-  const PIPE_GAP0 = 190;
-  const PIPE_GAPMIN = 130;
-  const PIPE_SPACING0 = 260;
-  const PIPE_SPACINGMIN = 210;
+
+  // --- Difficulty presets (v4.8) ----------------------------------------------
+  // maxDelta: max allowed vertical jump of the gap center between two
+  // consecutive gates — guarantees every gate is physically reachable.
+  // bob: gentle vertical sway amplitude of gates (0 = still).
+  const DIFFS = {
+    easy:   { gap0: 235, gapMin: 180, v0: 150, vMax: 250, sp0: 285, spMin: 235, maxDelta: 300, bob: 0  },
+    normal: { gap0: 190, gapMin: 130, v0: 170, vMax: 300, sp0: 260, spMin: 210, maxDelta: 215, bob: 10 },
+    hard:   { gap0: 168, gapMin: 112, v0: 195, vMax: 335, sp0: 245, spMin: 195, maxDelta: 165, bob: 16 },
+  };
+  const DIFF_KEY = 'puppyWingsDiff';
+  let difficulty = 'normal';
+  try { difficulty = localStorage.getItem(DIFF_KEY) || 'normal'; } catch (e) {}
+  if (!DIFFS[difficulty]) difficulty = 'normal';
+  let SCROLL_V0 = DIFFS[difficulty].v0;      // base gate speed
+  let SCROLL_VMAX = DIFFS[difficulty].vMax;
+  let PIPE_GAP0 = DIFFS[difficulty].gap0;
+  let PIPE_GAPMIN = DIFFS[difficulty].gapMin;
+  let PIPE_SPACING0 = DIFFS[difficulty].sp0;
+  let PIPE_SPACINGMIN = DIFFS[difficulty].spMin;
+  let GATE_MAX_DELTA = DIFFS[difficulty].maxDelta;
+  let GATE_BOB = DIFFS[difficulty].bob;
+  function applyDifficulty(d) {
+    if (!DIFFS[d]) return;
+    difficulty = d;
+    const c = DIFFS[d];
+    SCROLL_V0 = c.v0; SCROLL_VMAX = c.vMax;
+    PIPE_GAP0 = c.gap0; PIPE_GAPMIN = c.gapMin;
+    PIPE_SPACING0 = c.sp0; PIPE_SPACINGMIN = c.spMin;
+    GATE_MAX_DELTA = c.maxDelta; GATE_BOB = c.bob;
+    try { localStorage.setItem(DIFF_KEY, d); } catch (e) {}
+    document.querySelectorAll('.diff').forEach(b => b.classList.toggle('on', b.dataset.d === d));
+  }
 
   // Hybrid gameplay constants
   const COIN_R = 12;
@@ -821,21 +874,38 @@
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
+  // v4.8 cute chirp: pitch slides from f0 to f1 — softer & friendlier than flat beeps
+  function chirp(f0, f1, dur, type = 'sine', gain = 0.06) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, t);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
   const sfx = {
-    flap:   () => beep(520, 0.08, 'triangle', 0.05),
-    score:  () => { beep(880, 0.07, 'square', 0.05); setTimeout(() => beep(1175, 0.09, 'square', 0.05), 70); },
-    hit:    () => beep(120, 0.2,  'sawtooth', 0.1),
-    die:    () => beep(80,  0.4,  'sawtooth', 0.1),
-    coin:   () => { beep(1320, 0.06, 'square', 0.05); setTimeout(() => beep(1760, 0.09, 'square', 0.05), 55); },
-    power:  () => { beep(660, 0.08, 'triangle', 0.06); setTimeout(() => beep(990, 0.1, 'triangle', 0.06), 70); setTimeout(() => beep(1320, 0.14, 'triangle', 0.06), 150); },
-    perfect:() => { beep(1047, 0.07, 'sine', 0.06); setTimeout(() => beep(1319, 0.07, 'sine', 0.06), 60); setTimeout(() => beep(1568, 0.12, 'sine', 0.06), 120); },
-    bone:   () => { beep(700, 0.05, 'square', 0.06); setTimeout(() => beep(1050, 0.07, 'square', 0.06), 45); },
-    bonus:  () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'triangle',0.06), i*90)); },
-    shieldHit: () => { beep(320, 0.15, 'square', 0.08); setTimeout(() => beep(480, 0.18, 'square', 0.05), 60); },
-    combo:  () => { beep(990, 0.07, 'square', 0.06); setTimeout(() => beep(1320, 0.1, 'square', 0.06), 60); },
-    star:   () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'triangle', 0.07), i * 80)); },
+    flap:   () => chirp(520, 900, 0.09, 'sine', 0.055),                        // soft pop
+    score:  () => { beep(1047, 0.08, 'sine', 0.055); setTimeout(() => beep(1319, 0.12, 'sine', 0.055), 80); }, // happy ding-ding
+    hit:    () => chirp(320, 75, 0.18, 'triangle', 0.09),                      // soft bonk
+    die:    () => chirp(520, 140, 0.45, 'sine', 0.07),                         // gentle sad slide
+    coin:   () => chirp(1150, 1750, 0.09, 'triangle', 0.05),                  // cute plip
+    power:  () => { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'sine', 0.06), i * 75)); }, // sparkle
+    perfect:() => { [1319, 1568, 2093].forEach((f, i) => setTimeout(() => beep(f, 0.1, 'sine', 0.055), i * 65)); },
+    bone:   () => chirp(700, 1150, 0.08, 'triangle', 0.055),
+    bonus:  () => { [659, 784, 988, 1319].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'sine',0.06), i*85)); },
+    shieldHit: () => chirp(240, 520, 0.14, 'sine', 0.08),                      // boing
+    combo:  () => { beep(1175, 0.07, 'sine', 0.055); setTimeout(() => beep(1568, 0.11, 'sine', 0.055), 65); },
+    star:   () => { [659, 784, 988, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'sine', 0.07), i * 75)); },
     daily:  () => { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'sine', 0.07), i * 90)); },
-    ticket: () => { beep(700, 0.08, 'triangle', 0.06); setTimeout(() => beep(1050, 0.12, 'triangle', 0.06), 70); },
+    ticket: () => { chirp(700, 1050, 0.1, 'triangle', 0.06); setTimeout(() => chirp(900, 1350, 0.12, 'triangle', 0.06), 80); },
+    click:  () => beep(880, 0.05, 'sine', 0.04),                               // tiny UI pip
   };
 
   // --- Clouds / stars -------------------------------------------------------
@@ -913,9 +983,15 @@
     const margin = 60;
     const minY = margin + pipeGap * 0.5;
     const maxY = PLAY_H - margin - pipeGap * 0.5;
-    const gapY = minY + Math.random() * (maxY - minY);
+    // v4.8: clamp the vertical jump from the previous gate so every gate is
+    // reachable; the first gate of a run anchors near the bird's start height.
+    const anchor = pipes.length ? pipes[pipes.length - 1].baseY : PLAY_H * 0.42;
+    const lo = Math.max(minY, anchor - GATE_MAX_DELTA);
+    const hi = Math.min(maxY, anchor + GATE_MAX_DELTA);
+    const gapY = lo + Math.random() * Math.max(1, hi - lo);
     const px = VW + 20;
-    pipes.push({ x: px, gapY, gapH: pipeGap, passed: false });
+    pipes.push({ x: px, gapY, baseY: gapY, gapH: pipeGap, passed: false,
+      bobPhase: Math.random() * Math.PI * 2 });
 
     if (Math.random() < POWERUP_SPAWN_CHANCE) {
       powerups.push({ x: px + PIPE_W / 2, y: gapY, phase: Math.random() * Math.PI * 2,
@@ -1447,6 +1523,13 @@
     }
   });
   startBtn.addEventListener('click', startGame);
+  // v4.8 difficulty buttons
+  document.querySelectorAll('.diff').forEach(b => b.addEventListener('click', () => {
+    ensureAudio();
+    applyDifficulty(b.dataset.d);
+    sfx.click();
+  }));
+  applyDifficulty(difficulty); // highlight the saved choice on load
   againBtn.addEventListener('click', startGame);
   reviveBtn.addEventListener('click', buyRevive);
   ticketBtn.addEventListener('click', useTicketRevive);
@@ -1528,6 +1611,8 @@
           spawnPipe();
         }
         for (const p of pipes) p.x -= scrollV * dt;
+        // v4.8: gentle gate sway on normal/hard (collision + render read p.gapY)
+        if (GATE_BOB > 0) for (const p of pipes) p.gapY = p.baseY + Math.sin(elapsed * 1.7 + p.bobPhase) * GATE_BOB;
         for (const c of coins) c.x -= scrollV * dt;
         for (const pu of powerups) pu.x -= scrollV * dt;
 
