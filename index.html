@@ -1,0 +1,2454 @@
+<!DOCTYPE html>
+<!--
+  Puppy Wings v4 — angel puppy protagonist + bone-catching bonus — a reskin of "flappy-modern" by mf4633 (https://github.com/mf4633/flappy-modern)
+  Original licensed under the MIT License. This reskin keeps the same license.
+  Reskinned 2026-09-22 for Telegram Mini App publishing.
+  v4: vector angel-puppy art (flapping wings), bone-catching bonus round, Telegram Stars revive IAP.
+  v4.2: night-space sky, UI polish (Baloo 2, avatar ring, revive countdown bar), halo removed.
+  v4.3: refined vector puppy (fur volume, feathered wings, sparkle eyes); low-score medal shows puppy avatar.
+  v4.4: player character is now the circular-cropped avatar (vector puppy kept as fallback).
+  v4.5: avatar embedded as data URI (256px) so it renders in any preview; medal img has onerror fallback.
+  v4.6: combo system (milestone bonus), invincible-star powerup, daily rewards + revive tickets, AdsGram rewarded-ad revive.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#060a20" />
+  <meta name="theme-color" content="#060a20" />
+<title>Puppy Wings</title>
+<meta property="og:title" content="Puppy Wings" />
+<meta property="og:image" content="https://YOUR-DOMAIN/cover.jpg" />
+<meta property="og:description" content="Help the angel puppy flap through the crystal gates, grab stars, and catch bones! Tap to fly. How far can you get?" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0b1f2a;
+    --neon-pink: #f0abfc;
+    --neon-cyan: #67e8f9;
+    --neon-purple: #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #000;
+    font-family: "Baloo 2", ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #fff;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #wrap {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(ellipse at top, #0b2030, #050a12);
+  }
+  canvas#game {
+    display: block;
+    background: linear-gradient(to bottom, #6ec8ff, #b8e8ff);
+    border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06) inset;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    cursor: pointer;
+  }
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed;
+    top: 18px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    pointer-events: none;
+    font-weight: 800;
+    font-size: 56px;
+    color: #fff;
+    text-shadow:
+      0 3px 0 rgba(0,0,0,.35),
+      0 0 22px rgba(168,85,247,.55);
+    letter-spacing: 1px;
+    transition: transform .08s ease;
+  }
+  #hud.pop { transform: scale(1.18); }
+  .pill {
+    position: fixed;
+    background: rgba(8,12,26,.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.14);
+    color: #ffd93a;
+    font-weight: 800;
+    font-size: 18px;
+    padding: 8px 16px 8px 12px;
+    border-radius: 999px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    text-shadow: 0 2px 0 rgba(0,0,0,.4);
+    transition: transform .08s ease;
+    z-index: 4;
+  }
+  .pill.on { display: flex; }
+  .pill.pop { transform: scale(1.18); }
+  #coinHud { top: 22px; right: 22px; }
+  #shieldHud { top: 22px; left: 22px; color: #9fdcff; border-color: rgba(103,232,249,.35); }
+  #shieldHud .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #e8f8ff, #7fd0ff 60%, #2272c7);
+    box-shadow: 0 0 10px rgba(127,208,255,.8);
+  }
+  #coinHud .dot {
+    width: 18px; height: 18px;
+    background: radial-gradient(circle at 30% 30%, #fff2a8, #ffcf3a 60%, #a77900);
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    filter: drop-shadow(0 0 6px rgba(255,207,58,.8));
+  }
+  #starHud { top: 64px; left: 22px; color: #ffe27a; border-color: rgba(255,217,58,.4); }
+  #starHud .dot {
+    width: 18px; height: 18px;
+    background: radial-gradient(circle at 30% 30%, #fffbe8, #ffd93a 55%, #b45309);
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    filter: drop-shadow(0 0 8px rgba(255,217,58,.95));
+  }
+  #comboHud {
+    top: 100px; left: 50%; transform: translateX(-50%);
+    color: #ffb03a; border-color: rgba(255,159,67,.45); font-size: 20px;
+  }
+  #comboHud.pop { transform: translateX(-50%) scale(1.18); }
+  /* daily reward modal */
+  #dailyGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 14px 0 18px; }
+  .day-cell {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px; padding: 8px 2px 7px;
+    font-size: 10px; color: #8fa3c8; text-align: center; line-height: 1.5;
+  }
+  .day-cell .rw { display: block; font-size: 12px; font-weight: 800; color: #ffd93a; margin-top: 2px; }
+  .day-cell.today { border-color: #ffd93a; box-shadow: 0 0 14px rgba(255,217,58,.45); background: rgba(255,217,58,.10); }
+  .day-cell.claimed { opacity: .55; }
+  .day-cell.claimed .rw::after { content: ' \2713'; color: #8fd694; }
+  /* fake-ad overlay (plain-browser preview only) */
+  #adOverlay {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    background: rgba(5,8,20,.94); color: #fff; text-align: center; padding: 24px;
+  }
+  #adOverlay.on { display: flex; }
+  #adBar { width: 70%; max-width: 300px; height: 10px; background: rgba(255,255,255,.15); border-radius: 99px; overflow: hidden; }
+  #adProg { height: 100%; width: 0; background: linear-gradient(90deg,#a855f7,#ffd93a); border-radius: 99px; }
+  .revive-opt { width: 100%; }
+  #reviveCard button { margin-bottom: 10px; }
+  #reviveCard button.ghost { margin-bottom: 0; }
+  #ticketBtn {
+    background: linear-gradient(180deg, #fcd34d, #f59e0b);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.35), 0 4px 0 #92400e, 0 8px 20px rgba(245,158,11,.35);
+    text-shadow: 0 2px 0 rgba(0,0,0,.25);
+  }
+  #adBtn {
+    background: linear-gradient(180deg, #c084fc, #8b5cf6);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.35), 0 4px 0 #5b21b6, 0 8px 20px rgba(139,92,246,.4);
+    text-shadow: 0 2px 0 rgba(0,0,0,.25);
+  }
+  #pauseHint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,.55);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    pointer-events: none;
+    display: none;
+  }
+  #pauseHint.on { display: block; }
+  #pauseOverlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: rgba(5,10,18,.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #pauseOverlay.on { display: grid; }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    z-index: 6;
+  }
+  /* ---------- Cards ---------- */
+  .card {
+    pointer-events: auto;
+    position: relative;
+    background: linear-gradient(165deg, rgba(26,34,66,.94), rgba(10,14,30,.90));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(168,85,247,.38);
+    border-radius: 28px;
+    padding: 30px 26px 24px;
+    text-align: center;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,.6),
+      0 0 0 1px rgba(255,255,255,.05),
+      0 0 44px rgba(168,85,247,.14);
+    max-width: 350px;
+    width: calc(100% - 48px);
+    transform: translateY(12px) scale(.96);
+    opacity: 0;
+    transition: opacity .28s ease, transform .28s cubic-bezier(.2,1.4,.4,1);
+    color: #fff;
+    overflow: hidden;
+  }
+  .card.show { opacity: 1; transform: translateY(0) scale(1); }
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 26px; right: 26px;
+    height: 3px;
+    border-radius: 0 0 4px 4px;
+    background: linear-gradient(90deg, transparent, var(--neon-pink) 20%, var(--neon-purple) 50%, var(--neon-cyan) 80%, transparent);
+    filter: drop-shadow(0 2px 6px rgba(168,85,247,.8));
+  }
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse 120% 42% at 50% -10%, rgba(255,255,255,.09), transparent 60%);
+    pointer-events: none;
+  }
+  .logo {
+    line-height: 1.2;
+    animation: float 2.6s ease-in-out infinite;
+    filter: drop-shadow(0 6px 14px rgba(168,85,247,.5));
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-4deg); }
+    50% { transform: translateY(-10px) rotate(4deg); }
+  }
+  .avatar-wrap {
+    position: relative;
+    width: 108px; height: 108px;
+    margin: 2px auto 12px;
+    animation: float 2.8s ease-in-out infinite;
+  }
+  .avatar-wrap::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #f0abfc, #a855f7, #67e8f9, #f0abfc);
+    filter: blur(12px);
+    opacity: .55;
+    animation: spin 6s linear infinite;
+  }
+  .avatar-wrap::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    padding: 3px;
+    background: conic-gradient(from 180deg, #f0abfc, #67e8f9, #a855f7, #f0abfc);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    animation: spin 6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .avatar-wrap img {
+    position: relative;
+    width: 108px; height: 108px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    border: 3px solid rgba(20,16,40,.9);
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .card h1 {
+    font-family: "Baloo 2", ui-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 34px;
+    font-weight: 800;
+    margin: 2px 0 4px;
+    letter-spacing: .5px;
+    background: linear-gradient(92deg, #fde68a 0%, #f0abfc 35%, #a78bfa 65%, #67e8f9 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    filter: drop-shadow(0 3px 10px rgba(168,85,247,.35));
+  }
+  .tagline {
+    font-size: 14px;
+    color: #b9c6e2;
+    margin-bottom: 18px;
+  }
+  .howto {
+    text-align: left;
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 18px;
+    padding: 6px 12px;
+    margin-bottom: 16px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: #d5def2;
+  }
+  .how { display: flex; align-items: center; gap: 11px; padding: 8px 2px; }
+  .how + .how { border-top: 1px solid rgba(255,255,255,.06); }
+  .how .ic {
+    flex: none;
+    width: 36px; height: 36px;
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font-size: 19px;
+    background: linear-gradient(160deg, rgba(168,85,247,.28), rgba(103,232,249,.14));
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  .how b { color: #ffd93a; }
+  .mini-stats {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .mini-box {
+    flex: 1;
+    background: linear-gradient(170deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 16px;
+    padding: 10px 4px 9px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .mini-box .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.6px;
+    color: #8fa3c8;
+    margin-bottom: 3px;
+  }
+  .mini-box .value {
+    font-family: "Baloo 2", ui-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+  }
+  button {
+    font: inherit;
+    font-family: "Baloo 2", ui-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: .5px;
+    padding: 14px 30px;
+    border: none;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #f5a3f0 0%, #c084fc 55%, #a855f7 100%);
+    color: #fff;
+    cursor: pointer;
+    text-shadow: 0 2px 0 rgba(0,0,0,.22);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.35),
+      inset 0 -2px 0 rgba(0,0,0,.12),
+      0 6px 0 #6d28d9,
+      0 14px 30px rgba(168,85,247,.45);
+    transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
+    width: 100%;
+  }
+  button:hover { filter: brightness(1.06); }
+  button:active {
+    transform: translateY(4px);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.25),
+      0 2px 0 #6d28d9,
+      0 6px 16px rgba(168,85,247,.35);
+  }
+  button:disabled { opacity: .55; filter: saturate(.6); }
+  button.telegram {
+    background: linear-gradient(180deg, #8fdcff 0%, #38bdfd 60%, #0ea5e9 100%);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.35),
+      inset 0 -2px 0 rgba(0,0,0,.10),
+      0 6px 0 #0369a1,
+      0 14px 30px rgba(56,189,253,.35);
+    margin-top: 10px;
+  }
+  button.telegram:active {
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.25), 0 2px 0 #0369a1, 0 6px 16px rgba(56,189,253,.3);
+  }
+  button.ghost {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.16);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    text-shadow: none;
+    margin-top: 10px;
+    color: #a9b8d4;
+    font-size: 15px;
+    padding: 11px 30px;
+  }
+  button.ghost:active { transform: translateY(2px); box-shadow: none; }
+  .hint { font-size: 12px; color: #7a8db0; margin-top: 12px; }
+  .medal {
+    width: 88px; height: 88px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 44px;
+    line-height: 1;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,.22), rgba(255,255,255,.04) 55%),
+      linear-gradient(160deg, #3b2a6e, #1c1440);
+    border: 2px solid rgba(255,217,58,.45);
+    box-shadow: 0 0 28px rgba(255,217,58,.25), inset 0 2px 6px rgba(255,255,255,.15);
+  }
+  .ribbon {
+    position: absolute;
+    top: 20px;
+    right: -38px;
+    transform: rotate(32deg);
+    background: linear-gradient(90deg, #f472b6, #fb7185);
+    color: #fff;
+    font-family: "Baloo 2", ui-rounded, -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    padding: 6px 44px;
+    box-shadow: 0 4px 14px rgba(244,114,182,.5);
+    animation: ribbonIn .45s cubic-bezier(.2,1.6,.4,1) both .2s;
+    z-index: 2;
+  }
+  @keyframes ribbonIn {
+    from { transform: rotate(32deg) scale(0); }
+    to { transform: rotate(32deg) scale(1); }
+  }
+  .scores {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    margin: 12px 0 6px;
+  }
+  .score-box {
+    flex: 1;
+    background: linear-gradient(170deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 16px;
+    padding: 10px 4px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .score-box .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.6px;
+    color: #8fa3c8;
+    margin-bottom: 3px;
+  }
+  .score-box .value {
+    font-family: "Baloo 2", ui-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+  }
+  #coinTotalLine { margin: 8px 0 16px; color: #a9b8d4; font-size: 13px; }
+  #coinTotalLine span { color: #ffd93a; font-weight: 800; }
+  .countbar {
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.08);
+    overflow: hidden;
+    margin: -8px 2px 16px;
+  }
+  #reviveBar {
+    height: 100%;
+    width: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #f0abfc, #a855f7);
+    box-shadow: 0 0 12px rgba(168,85,247,.8);
+    transition: width .2s linear;
+  }
+
+</style>
+  <!-- AdsGram rewarded-ads SDK (Telegram Mini Apps). No-op if blocked/unavailable. -->
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game"></canvas>
+  </div>
+  <div id="hud"></div>
+  <div id="coinHud" class="pill"><span class="dot"></span><span id="coinCount">0</span></div>
+  <div id="shieldHud" class="pill"><span class="dot"></span><span id="shieldCount">0s</span></div>
+  <div id="starHud" class="pill"><span class="dot"></span><span id="starCount">0s</span></div>
+  <div id="comboHud" class="pill"><span>🔥</span><span id="comboCount">x3</span></div>
+  <div id="pauseHint">P to pause</div>
+  <div id="pauseOverlay">PAUSED</div>
+  <div id="overlay">
+    <div id="startCard" class="card show">
+      <div class="avatar-wrap"><img src="data:image/jpeg;base64,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" alt="Puppy Wings"></div>
+      <h1>Puppy Wings</h1>
+      <p class="tagline">Thread the crystal gates. Grab stars. Catch bones. Don't bonk.</p>
+      <div class="howto">
+        <div class="how"><span class="ic">👆</span><span>Tap / Space — flap wings</span></div>
+        <div class="how"><span class="ic">⭐</span><span>Grab <b>stars</b> for bonus points</span></div>
+        <div class="how"><span class="ic">🛡️</span><span><b>Shield</b> saves you from one crash</span></div>
+        <div class="how"><span class="ic">🌟</span><span>Golden <b>star</b> = invincible!</span></div>
+        <div class="how"><span class="ic">🔥</span><span>Chain gates for <b>combo</b> bonus</span></div>
+        <div class="how"><span class="ic">✨</span><span>Skim a gate edge for a <b>Perfect!</b></span></div>
+        <div class="how"><span class="ic">🦴</span><span>Every 12 gates: <b>bonus round</b> — tap the bones!</span></div>
+      </div>
+      <div class="mini-stats">
+        <div class="mini-box"><div class="label">Best</div><div class="value" id="bestStart">0</div></div>
+        <div class="mini-box"><div class="label">⭐ Stars</div><div class="value" id="coinStart" style="color:#ffd93a">0</div></div>
+        <div class="mini-box"><div class="label">🎟️ Tickets</div><div class="value" id="ticketStart" style="color:#fcd34d">0</div></div>
+      </div>
+      <button id="startBtn">▶ &nbsp;Start</button>
+      <button id="dailyBtn" class="ghost">🎁 每日奖励</button>
+    </div>
+    <div id="reviveCard" class="card" style="display:none">
+      <div class="logo" style="font-size:56px">💫</div>
+      <h1>Revive?</h1>
+      <p class="tagline">Continue right where you crashed — with a fresh shield!</p>
+      <div class="mini-stats">
+        <div class="mini-box"><div class="label">Cost</div><div class="value" style="color:#ffd93a" id="revivePrice">25 ⭐</div></div>
+        <div class="mini-box"><div class="label">Time left</div><div class="value" id="reviveCount">5</div></div>
+      </div>
+      <div class="countbar"><div id="reviveBar"></div></div>
+      <button id="ticketBtn" class="revive-opt" style="display:none">🎟️ Revive</button>
+      <button id="adBtn" class="revive-opt">📺 看广告免费复活</button>
+      <button id="reviveBtn">💫 Revive</button>
+      <button id="giveUpBtn" class="ghost">Give up</button>
+      <div class="hint" id="reviveHint"></div>
+    </div>
+    <div id="dailyCard" class="card" style="display:none">
+      <div class="logo" style="font-size:56px">🎁</div>
+      <h1>每日奖励</h1>
+      <p class="tagline" id="dailySub">连续登录，奖励越拿越多！</p>
+      <div id="dailyGrid"></div>
+      <button id="dailyClaimBtn">领取奖励</button>
+      <button id="dailyCloseBtn" class="ghost">稍后再说</button>
+    </div>
+    <div id="overCard" class="card" style="display:none">
+      <div class="ribbon" id="newBestRibbon" style="display:none">NEW BEST!</div>
+      <div class="medal" id="medal"></div>
+      <h1 id="overTitle">Game Over</h1>
+      <div class="scores">
+        <div class="score-box"><div class="label">Score</div><div class="value" id="finalScore">0</div></div>
+        <div class="score-box"><div class="label">Best</div><div class="value" id="bestScore">0</div></div>
+        <div class="score-box"><div class="label">⭐ Stars</div><div class="value" id="runCoins" style="color:#ffd93a">0</div></div>
+      </div>
+      <div id="coinTotalLine">Total stars banked: <span id="coinTotal">0</span></div>
+      <div id="comboLine" class="hint" style="margin-top:4px">🔥 Best combo: <span id="bestCombo">x0</span></div>
+      <button id="againBtn">↻ &nbsp;Play Again</button>
+      <button id="shareBtn" class="telegram">✈ &nbsp;Share Score</button>
+      <div class="hint">Space / click / tap to fly</div>
+    </div>
+  </div>
+
+  <div id="adOverlay">
+    <div style="font-size:64px">📺</div>
+    <div style="font-weight:800;font-size:20px">广告播放中…</div>
+    <div class="hint" style="color:#8fa3c8">预览模式：模拟广告，看完即可复活</div>
+    <div id="adBar"><div id="adProg"></div></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ================= Stars IAP config =================
+  // reviveStars: price of one revive in Telegram Stars (25 ≈ $0.33).
+  // The /api/invoice endpoint (see api/invoice.js) creates the invoice with your bot token.
+  // In plain-browser preview (no Telegram), revive is free so you can test the flow.
+  const STARS = {
+    enabled: true,
+    reviveStars: 25,
+  };
+
+  // ================= Feature config: combo / star / ads / daily =================
+  const COMBO_MILESTONE = 5;      // every N chained gates -> bonus points
+  const COMBO_BONUS = 2;
+  const STAR_DUR = 6;             // invincible-star seconds
+  const STAR_SPAWN_WEIGHT = 0.35; // share of powerup spawns that are stars
+  // AdsGram rewarded-ad block id — get yours at https://partner.adsgram.ai and paste it here.
+  const ADSGAM_BLOCK_ID = '';
+  const TICKET_KEY = 'puppyWingsTickets';
+  const DAILY_KEY = 'puppyWingsDaily';
+  const COMBO_BEST_KEY = 'puppyWingsComboBest';
+  const DAILY_REWARDS = [
+    { stars: 20,  tickets: 0 },
+    { stars: 0,   tickets: 1 },
+    { stars: 40,  tickets: 0 },
+    { stars: 0,   tickets: 2 },
+    { stars: 60,  tickets: 0 },
+    { stars: 0,   tickets: 3 },
+    { stars: 150, tickets: 3 },
+  ];
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  // Player character: circular crop of the embedded avatar (vector puppy is the fallback)
+  const AVATAR_SRC = document.querySelector('.avatar-wrap img').src;
+  const puppyImg = new Image();
+  puppyImg.src = AVATAR_SRC;
+  const hud = document.getElementById('hud');
+  const startCard = document.getElementById('startCard');
+  const reviveCard = document.getElementById('reviveCard');
+  const overCard = document.getElementById('overCard');
+  const startBtn = document.getElementById('startBtn');
+  const againBtn = document.getElementById('againBtn');
+  const reviveBtn = document.getElementById('reviveBtn');
+  const giveUpBtn = document.getElementById('giveUpBtn');
+  const reviveCountEl = document.getElementById('reviveCount');
+  const reviveHintEl = document.getElementById('reviveHint');
+  const revivePriceEl = document.getElementById('revivePrice');
+  const reviveBarEl = document.getElementById('reviveBar');
+  const bestStart = document.getElementById('bestStart');
+  const finalScoreEl = document.getElementById('finalScore');
+  const bestScoreEl = document.getElementById('bestScore');
+  const medalEl = document.getElementById('medal');
+  const overTitleEl = document.getElementById('overTitle');
+  const newBestRibbon = document.getElementById('newBestRibbon');
+  const coinHud = document.getElementById('coinHud');
+  const coinCountEl = document.getElementById('coinCount');
+  const shieldHud = document.getElementById('shieldHud');
+  const shieldCountEl = document.getElementById('shieldCount');
+  const runCoinsEl = document.getElementById('runCoins');
+  const coinTotalEl = document.getElementById('coinTotal');
+  const coinStartEl = document.getElementById('coinStart');
+  const pauseHint = document.getElementById('pauseHint');
+  const pauseOverlay = document.getElementById('pauseOverlay');
+  const ticketBtn = document.getElementById('ticketBtn');
+  const adBtn = document.getElementById('adBtn');
+  const starHud = document.getElementById('starHud');
+  const starCountEl = document.getElementById('starCount');
+  const comboHud = document.getElementById('comboHud');
+  const comboCountEl = document.getElementById('comboCount');
+  const ticketStartEl = document.getElementById('ticketStart');
+  const dailyBtn = document.getElementById('dailyBtn');
+  const dailyCard = document.getElementById('dailyCard');
+  const dailyGrid = document.getElementById('dailyGrid');
+  const dailySub = document.getElementById('dailySub');
+  const dailyClaimBtn = document.getElementById('dailyClaimBtn');
+  const dailyCloseBtn = document.getElementById('dailyCloseBtn');
+  const bestComboEl = document.getElementById('bestCombo');
+  const adOverlay = document.getElementById('adOverlay');
+  const adProg = document.getElementById('adProg');
+
+  revivePriceEl.textContent = STARS.reviveStars + ' ⭐';
+
+  // --- Telegram Mini App integration (safe no-op in plain browsers) ----------------
+  let tgApp = null;
+  try {
+    tgApp = window.Telegram && window.Telegram.WebApp;
+    if (tgApp) {
+      tgApp.ready(); tgApp.expand();
+      // keep the game chrome dark + prevent accidental swipe-down close on mobile
+      try {
+        if (typeof tgApp.setHeaderColor === 'function') tgApp.setHeaderColor('#0a0e27');
+        if (typeof tgApp.setBackgroundColor === 'function') tgApp.setBackgroundColor('#060a20');
+        if (typeof tgApp.disableVerticalSwipes === 'function') tgApp.disableVerticalSwipes();
+      } catch (e2) {}
+    }
+  } catch (e) { tgApp = null; }
+  function hasStarsWallet() {
+    try {
+      const w = window.Telegram && window.Telegram.WebApp;
+      return !!(w && typeof w.openInvoice === 'function');
+    } catch (e) { return false; }
+  }
+
+  // --- Virtual resolution ---------------------------------------------------
+  const VW = 480;
+  const VH = 800;
+  let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+
+  function resize() {
+    const pad = 12;
+    const maxW = window.innerWidth - pad * 2;
+    const maxH = window.innerHeight - pad * 2;
+    const s = Math.min(maxW / VW, maxH / VH);
+    canvas.style.width = (VW * s) + 'px';
+    canvas.style.height = (VH * s) + 'px';
+    dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    canvas.width = Math.round(VW * s * dpr);
+    canvas.height = Math.round(VH * s * dpr);
+    ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // --- Game constants -------------------------------------------------------
+  const GROUND_H = 96;
+  const PLAY_H = VH - GROUND_H;
+
+  const GRAVITY = 1400;      // px / s^2
+  const FLAP_V = -430;       // px / s
+  const MAX_VY = 800;
+  const SCROLL_V0 = 170;     // base gate speed
+  const SCROLL_VMAX = 300;
+  const PIPE_W = 78;
+  const PIPE_GAP0 = 190;
+  const PIPE_GAPMIN = 130;
+  const PIPE_SPACING0 = 260;
+  const PIPE_SPACINGMIN = 210;
+
+  // Hybrid gameplay constants
+  const COIN_R = 12;
+  const COIN_SPAWN_CHANCE = 0.65;    // per gate
+  const POWERUP_R = 14;
+  const POWERUP_SPAWN_CHANCE = 0.08; // per gate (replaces the coin)
+  const SHIELD_DUR = 8;              // seconds of protection
+  const SHIELD_PULSE_R = 28;
+  const INVULN_AFTER_SHIELD = 0.7;   // brief grace after shield absorbs a hit
+  const PERFECT_MARGIN = 26;         // px from gap edge -> "Perfect!" bonus
+
+  // Bonus round (whack-a-mole) constants
+  const BONUS_EVERY = 12;            // gates between bonus rounds
+  const BONUS_DUR = 6;               // seconds
+  const BONE_R = 20;
+  const BONE_LIFE = 1.4;            // seconds each bone stays
+  const BONE_SPAWN_INTERVAL = 0.5;
+  const BONE_REWARD = 2;            // stars per bone
+
+  const REVIVE_COUNTDOWN = 5;        // seconds to decide on revive
+
+  // --- State ----------------------------------------------------------------
+  const STATE = { READY: 0, PLAY: 1, DEAD: 2, OVER: 3, REVIVE: 4 };
+  let state = STATE.READY;
+
+  const bird = {
+    x: VW * 0.3,
+    y: VH * 0.45,
+    vy: 0,
+    r: 18,
+    rot: 0,
+    flapPhase: 0,
+  };
+
+  const pipes = [];            // { x, gapY, gapH, passed }
+  const particles = [];        // { x, y, vx, vy, life, max, color, size }
+  const clouds = [];
+  const trailPuffs = [];       // soft puffs behind bird
+  const coins = [];            // { x, y, phase, taken }
+  const powerups = [];         // { x, y, phase }
+  const sparkles = [];         // { x, y, vx, vy, life, max, size }
+  const popups = [];           // { x, y, text, life, max, color }
+  const stars = [];            // background twinkles
+  const bones = [];             // bonus-round targets { x, y, age, wob }
+
+  let score = 0;
+  let gatesPassed = 0;       // gates flown through (drives the bonus round, unaffected by score bonuses)
+  let runCoins = 0;
+  let perfects = 0;
+  let bonesCaught = 0;
+  let best = 0;
+  let coinTotal = 0;
+  let starTime = 0;          // invincible-star countdown
+  let combo = 0;             // chained gates this run
+  let comboBest = 0;         // best combo this run
+  let comboBestEver = 0;     // persisted all-time best combo
+  let tickets = 0;           // revive tickets (wallet)
+  let adWatching = false;    // rewarded ad currently playing
+  try { best = parseInt(localStorage.getItem('puppyWingsBest') || '0', 10) || 0; } catch(e) {}
+  try { coinTotal = parseInt(localStorage.getItem('puppyWingsStars') || '0', 10) || 0; } catch(e) {}
+  try { tickets = parseInt(localStorage.getItem(TICKET_KEY) || '0', 10) || 0; } catch(e) {}
+  try { comboBestEver = parseInt(localStorage.getItem(COMBO_BEST_KEY) || '0', 10) || 0; } catch(e) {}
+  ticketStartEl.textContent = tickets;
+  bestStart.textContent = best;
+  coinStartEl.textContent = coinTotal;
+
+  let shieldTime = 0;
+  let invulnTime = 0;
+  let paused = false;
+
+  // Bonus round state
+  let bonusActive = false;
+  let bonusTime = 0;
+  let boneTimer = 0;
+
+  // Revive state
+  let reviveUsed = false;
+  let reviveTimer = 0;
+
+  let timeSinceSpawn = 0;
+  let elapsed = 0;
+  let scrollV = SCROLL_V0;
+  let pipeGap = PIPE_GAP0;
+  let pipeSpacing = PIPE_SPACING0;
+
+  let shake = 0;
+  let shakeSeed = 0;
+  let flashAlpha = 0;
+  let groundOffset = 0;
+
+  // --- Audio (WebAudio tones — no assets) -----------------------------------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (audioCtx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    } catch(e) {}
+  }
+  function beep(freq, dur, type = 'square', gain = 0.06) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    flap:   () => beep(520, 0.08, 'triangle', 0.05),
+    score:  () => { beep(880, 0.07, 'square', 0.05); setTimeout(() => beep(1175, 0.09, 'square', 0.05), 70); },
+    hit:    () => beep(120, 0.2,  'sawtooth', 0.1),
+    die:    () => beep(80,  0.4,  'sawtooth', 0.1),
+    coin:   () => { beep(1320, 0.06, 'square', 0.05); setTimeout(() => beep(1760, 0.09, 'square', 0.05), 55); },
+    power:  () => { beep(660, 0.08, 'triangle', 0.06); setTimeout(() => beep(990, 0.1, 'triangle', 0.06), 70); setTimeout(() => beep(1320, 0.14, 'triangle', 0.06), 150); },
+    perfect:() => { beep(1047, 0.07, 'sine', 0.06); setTimeout(() => beep(1319, 0.07, 'sine', 0.06), 60); setTimeout(() => beep(1568, 0.12, 'sine', 0.06), 120); },
+    bone:   () => { beep(700, 0.05, 'square', 0.06); setTimeout(() => beep(1050, 0.07, 'square', 0.06), 45); },
+    bonus:  () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'triangle',0.06), i*90)); },
+    shieldHit: () => { beep(320, 0.15, 'square', 0.08); setTimeout(() => beep(480, 0.18, 'square', 0.05), 60); },
+    combo:  () => { beep(990, 0.07, 'square', 0.06); setTimeout(() => beep(1320, 0.1, 'square', 0.06), 60); },
+    star:   () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'triangle', 0.07), i * 80)); },
+    daily:  () => { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'sine', 0.07), i * 90)); },
+    ticket: () => { beep(700, 0.08, 'triangle', 0.06); setTimeout(() => beep(1050, 0.12, 'triangle', 0.06), 70); },
+  };
+
+  // --- Clouds / stars -------------------------------------------------------
+  function seedClouds() {
+    clouds.length = 0;
+    for (let i = 0; i < 7; i++) {
+      clouds.push({
+        x: Math.random() * VW,
+        y: 40 + Math.random() * (PLAY_H * 0.55),
+        s: 0.4 + Math.random() * 0.9,
+        speed: 10 + Math.random() * 30,
+      });
+    }
+  }
+  seedClouds();
+
+  function seedStars() {
+    stars.length = 0;
+    for (let i = 0; i < 60; i++) {
+      stars.push({
+        x: Math.random() * VW,
+        y: Math.random() * (PLAY_H * 0.7),
+        s: 0.6 + Math.random() * 1.4,
+        twinkle: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+  seedStars();
+
+  // --- Reset / spawn --------------------------------------------------------
+  function reset() {
+    bird.x = VW * 0.3;
+    bird.y = VH * 0.45;
+    bird.vy = 0;
+    bird.rot = 0;
+    pipes.length = 0;
+    particles.length = 0;
+    trailPuffs.length = 0;
+    coins.length = 0;
+    powerups.length = 0;
+    sparkles.length = 0;
+    popups.length = 0;
+    bones.length = 0;
+    score = 0;
+    gatesPassed = 0;
+    runCoins = 0;
+    perfects = 0;
+    bonesCaught = 0;
+    elapsed = 0;
+    timeSinceSpawn = 0;
+    scrollV = SCROLL_V0;
+    pipeGap = PIPE_GAP0;
+    pipeSpacing = PIPE_SPACING0;
+    shake = 0;
+    flashAlpha = 0;
+    shieldTime = 0;
+    invulnTime = 0;
+    starTime = 0;
+    combo = 0;
+    comboBest = 0;
+    bonusActive = false;
+    bonusTime = 0;
+    reviveUsed = false;
+    reviveTimer = 0;
+    paused = false;
+    pauseOverlay.classList.remove('on');
+    hud.textContent = '';
+    coinCountEl.textContent = '0';
+    shieldCountEl.textContent = '0s';
+    updateStarHud();
+    updateComboHud();
+  }
+
+  function spawnPipe() {
+    const margin = 60;
+    const minY = margin + pipeGap * 0.5;
+    const maxY = PLAY_H - margin - pipeGap * 0.5;
+    const gapY = minY + Math.random() * (maxY - minY);
+    const px = VW + 20;
+    pipes.push({ x: px, gapY, gapH: pipeGap, passed: false });
+
+    if (Math.random() < POWERUP_SPAWN_CHANCE) {
+      powerups.push({ x: px + PIPE_W / 2, y: gapY, phase: Math.random() * Math.PI * 2,
+        kind: Math.random() < STAR_SPAWN_WEIGHT ? 'star' : 'shield' });
+    } else if (Math.random() < COIN_SPAWN_CHANCE) {
+      const oy = (Math.random() - 0.5) * (pipeGap - COIN_R * 4);
+      coins.push({ x: px + PIPE_W / 2, y: gapY + oy, phase: Math.random() * Math.PI * 2, taken: false });
+    }
+  }
+
+  // --- Helpers --------------------------------------------------------------
+  function bumpHud(el) {
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+  }
+
+  function addPopup(text, color = '#ffd93a') {
+    popups.push({ x: bird.x, y: bird.y - 44, text, life: 1.1, max: 1.1, color });
+  }
+
+  function bankCoins(n) {
+    runCoins += n;
+    coinCountEl.textContent = runCoins;
+    bumpHud(coinHud);
+  }
+
+  // --- Bonus round ----------------------------------------------------------
+  function startBonus() {
+    bonusActive = true;
+    bonusTime = BONUS_DUR;
+    boneTimer = 0;
+    bones.length = 0;
+    // sweep the arena clean for the mini-game
+    pipes.length = 0;
+    coins.length = 0;
+    powerups.length = 0;
+    bird.vy = 0;
+    sfx.bonus();
+    flashAlpha = Math.max(flashAlpha, 0.2);
+    addPopup('BONUS! Tap the bones!', '#8fd694');
+  }
+
+  function spawnBone() {
+    bones.push({
+      x: 60 + Math.random() * (VW - 120),
+      y: 130 + Math.random() * (PLAY_H - 300),
+      age: 0,
+      wob: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function updateBonus(dt) {
+    bonusTime -= dt;
+    // bird hovers in place — no dying during the party
+    bird.vy = 0;
+    bird.y += (VH * 0.45 - bird.y) * Math.min(1, dt * 4);
+    bird.rot *= 0.9;
+    bird.flapPhase = Math.max(0, bird.flapPhase - dt * 3);
+
+    boneTimer -= dt;
+    if (boneTimer <= 0 && bones.length < 6) {
+      spawnBone();
+      boneTimer = BONE_SPAWN_INTERVAL;
+    }
+    for (let i = bones.length - 1; i >= 0; i--) {
+      const m = bones[i];
+      m.age += dt;
+      m.wob += dt * 6;
+      if (m.age > BONE_LIFE) bones.splice(i, 1);
+    }
+
+    groundOffset = (groundOffset + scrollV * dt) % 48;
+
+    if (bonusTime <= 0) {
+      bonusActive = false;
+      bones.length = 0;
+      timeSinceSpawn = 0;
+      addPopup('Go!', '#67e8f9');
+    }
+  }
+
+  function tapBonus(e) {
+    const rect = canvas.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) / rect.width * VW;
+    const vy = (e.clientY - rect.top) / rect.height * VH;
+    for (let i = bones.length - 1; i >= 0; i--) {
+      const m = bones[i];
+      const dx = vx - m.x, dy = vy - m.y;
+      const rr = BONE_R * 1.5;
+      if (dx * dx + dy * dy <= rr * rr) {
+        bones.splice(i, 1);
+        bonesCaught++;
+        bankCoins(BONE_REWARD);
+        score++;
+        hud.textContent = score;
+        bumpHud(hud);
+        sfx.bone();
+        addPopup('+' + BONE_REWARD + '⭐', '#ffd28a');
+        for (let k = 0; k < 10; k++) {
+          const a = Math.random() * Math.PI * 2;
+          sparkles.push({
+            x: m.x, y: m.y,
+            vx: Math.cos(a) * 140, vy: Math.sin(a) * 140 - 20,
+            life: 0.4, max: 0.4, size: 2 + Math.random() * 2,
+          });
+        }
+        return;
+      }
+    }
+  }
+
+  // --- Daily rewards ----------------------------------------------------------
+  function todayStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function getDaily() {
+    try { return JSON.parse(localStorage.getItem(DAILY_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function isDailyClaimable() {
+    return getDaily().last !== todayStr();
+  }
+  function dailyCycle() {
+    // the reward index (0..6) and streak the NEXT claim will grant
+    const d = getDaily();
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const continued = d.last === todayStr(y);
+    const streak = continued ? (d.streak || 0) + 1 : 1;
+    return { streak, idx: (streak - 1) % DAILY_REWARDS.length };
+  }
+  function fmtReward(r) {
+    const parts = [];
+    if (r.stars) parts.push(r.stars + '⭐');
+    if (r.tickets) parts.push(r.tickets + '🎟️');
+    return parts.join('+');
+  }
+  function renderDailyGrid() {
+    const claimable = isDailyClaimable();
+    const cur = dailyCycle();
+    dailySub.textContent = claimable
+      ? '连续登录 ' + cur.streak + ' 天，今日可领第 ' + (cur.idx + 1) + ' 天奖励！'
+      : '今日已领取，明天继续！当前连续 ' + (getDaily().streak || 0) + ' 天';
+    let html = '';
+    for (let i = 0; i < DAILY_REWARDS.length; i++) {
+      let cls = 'day-cell';
+      if (claimable && i === cur.idx) cls += ' today';
+      if ((claimable && i < cur.idx) || !claimable) cls += ' claimed';
+      html += '<div class="' + cls + '">第' + (i + 1) + '天<span class="rw">' + fmtReward(DAILY_REWARDS[i]) + '</span></div>';
+    }
+    dailyGrid.innerHTML = html;
+    dailyClaimBtn.disabled = !claimable;
+    dailyClaimBtn.textContent = claimable ? '领取奖励' : '今日已领取';
+  }
+  function claimDaily() {
+    if (!isDailyClaimable()) return;
+    const cur = dailyCycle();
+    const r = DAILY_REWARDS[cur.idx];
+    if (r.stars) {
+      coinTotal += r.stars;
+      try { localStorage.setItem('puppyWingsStars', String(coinTotal)); } catch (e) {}
+      coinStartEl.textContent = coinTotal;
+    }
+    if (r.tickets) {
+      tickets += r.tickets;
+      saveTickets();
+      ticketStartEl.textContent = tickets;
+    }
+    try { localStorage.setItem(DAILY_KEY, JSON.stringify({ last: todayStr(), streak: cur.streak })); } catch (e) {}
+    sfx.daily();
+    dailySub.textContent = '领取成功！+' + fmtReward(r);
+    renderDailyGrid();
+    setTimeout(() => hideCard(dailyCard), 700);
+  }
+
+  // --- Stars IAP: revive ----------------------------------------------------
+  function offerReviveOrGameOver() {
+    if (STARS.enabled && !reviveUsed) {
+      state = STATE.REVIVE;
+      reviveTimer = REVIVE_COUNTDOWN;
+      reviveCountEl.textContent = Math.ceil(reviveTimer);
+      if (reviveBarEl) reviveBarEl.style.width = '100%';
+      reviveHintEl.textContent = '';
+      reviveBtn.disabled = false;
+      reviveBtn.textContent = '💫 Revive for ' + STARS.reviveStars + ' ⭐';
+      if (tickets > 0) {
+        ticketBtn.style.display = '';
+        ticketBtn.textContent = '🎟️ 用复活券（剩 ' + tickets + ' 张）';
+        ticketBtn.disabled = false;
+      } else {
+        ticketBtn.style.display = 'none';
+      }
+      // AdsGram needs a block id inside Telegram; in plain-browser preview the ad is simulated
+      adBtn.style.display = (!isTelegramEnv() || ADSGAM_BLOCK_ID) ? '' : 'none';
+      adBtn.disabled = false;
+      adBtn.textContent = '📺 看广告免费复活';
+      showCard(reviveCard);
+    } else {
+      finishGameOver();
+    }
+  }
+
+  async function buyRevive() {
+    reviveBtn.disabled = true;
+    reviveBtn.textContent = 'Processing…';
+    reviveHintEl.textContent = '';
+    try {
+      const r = await fetch('/api/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // initData lets the server verify the request really came from this Telegram user
+        body: JSON.stringify({ type: 'revive', initData: (tgApp && tgApp.initData) || '' }),
+      });
+      if (!r.ok) throw new Error('invoice api');
+      const data = await r.json();
+      const w = window.Telegram && window.Telegram.WebApp;
+      if (w && typeof w.openInvoice === 'function' && data.invoiceLink) {
+        w.openInvoice(data.invoiceLink, (status) => {
+          if (status === 'paid') {
+            doRevive();
+          } else {
+            reviveBtn.disabled = false;
+            reviveBtn.textContent = '💫 Revive for ' + STARS.reviveStars + ' ⭐';
+            reviveHintEl.textContent = status === 'cancelled' ? 'Payment cancelled.' : 'Payment not completed.';
+          }
+        });
+        return;
+      }
+      throw new Error('no wallet');
+    } catch (err) {
+      if (!hasStarsWallet()) {
+        // Plain-browser preview: free revive so the flow is testable
+        reviveHintEl.textContent = 'Preview mode: free revive';
+        setTimeout(doRevive, 400);
+      } else {
+        reviveBtn.disabled = false;
+        reviveBtn.textContent = '💫 Revive for ' + STARS.reviveStars + ' ⭐';
+        reviveHintEl.textContent = 'Stars payment unavailable right now.';
+      }
+    }
+  }
+
+  let adController = null;
+  function isTelegramEnv() { return !!tgApp; }
+
+  function useTicketRevive() {
+    if (state !== STATE.REVIVE || tickets <= 0) return;
+    tickets--;
+    saveTickets();
+    ticketStartEl.textContent = tickets;
+    sfx.ticket();
+    doRevive();
+  }
+
+  function getAdController() {
+    if (!ADSGAM_BLOCK_ID) return null;
+    try {
+      if (!isTelegramEnv()) return null;
+      if (!window.Adsgram || typeof window.Adsgram.init !== 'function') return null;
+      if (!adController) adController = window.Adsgram.init({ blockId: ADSGAM_BLOCK_ID });
+      return adController;
+    } catch (e) { return null; }
+  }
+
+  async function watchAdRevive() {
+    if (state !== STATE.REVIVE || adWatching) return;
+    if (!isTelegramEnv()) { simulateAd(); return; } // plain-browser preview: simulated ad
+    const ctrl = getAdController();
+    if (!ctrl) { reviveHintEl.textContent = '广告暂不可用，请稍后再试'; return; }
+    adWatching = true;
+    adBtn.disabled = true;
+    adBtn.textContent = '广告播放中…';
+    try {
+      const res = await ctrl.show();
+      if (res && res.done) { doRevive(); return; }
+      reviveHintEl.textContent = '需要看完广告才能复活';
+    } catch (err) {
+      reviveHintEl.textContent = '广告加载失败，请稍后再试';
+    } finally {
+      adWatching = false;
+      adBtn.disabled = false;
+      adBtn.textContent = '📺 看广告免费复活';
+    }
+  }
+
+  function simulateAd() {
+    adWatching = true;
+    adOverlay.classList.add('on');
+    adProg.style.width = '0%';
+    reviveHintEl.textContent = '';
+    const t0 = performance.now(), DUR = 2500;
+    (function step() {
+      if (state !== STATE.REVIVE) { adOverlay.classList.remove('on'); adWatching = false; return; }
+      const p = Math.min(1, (performance.now() - t0) / DUR);
+      adProg.style.width = (p * 100).toFixed(1) + '%';
+      if (p < 1) { requestAnimationFrame(step); return; }
+      adOverlay.classList.remove('on');
+      adWatching = false;
+      reviveHintEl.textContent = '预览模式：模拟广告已播放';
+      doRevive();
+    })();
+  }
+
+  function doRevive() {
+    if (state !== STATE.REVIVE) return; // give-up / timeout already resolved
+    hideCard(reviveCard);
+    reviveUsed = true;
+    state = STATE.PLAY;
+    bird.x = VW * 0.3;
+    bird.y = VH * 0.42;
+    bird.vy = 0;
+    bird.rot = 0;
+    pipes.length = 0;
+    coins.length = 0;
+    powerups.length = 0;
+    bones.length = 0;
+    bonusActive = false;
+    timeSinceSpawn = -1.2; // grace period before the next gate
+    shieldTime = SHIELD_DUR;
+    invulnTime = 1.5;
+    starTime = 0;
+    combo = 0;
+    adWatching = false;
+    adOverlay.classList.remove('on');
+    updateShieldHud();
+    updateStarHud();
+    updateComboHud();
+    flashAlpha = 0.3;
+    addPopup('Revived!', '#9fdcff');
+    sfx.power();
+  }
+
+  // --- Input ----------------------------------------------------------------
+  function flap() {
+    if (state === STATE.READY) {
+      startGame();
+      return;
+    }
+    if (state === STATE.PLAY && !bonusActive) {
+      bird.vy = FLAP_V;
+      bird.flapPhase = 1;
+      sfx.flap();
+      for (let i = 0; i < 4; i++) {
+        trailPuffs.push({
+          x: bird.x - 10, y: bird.y + 4,
+          vx: -20 - Math.random() * 30, vy: 20 + Math.random() * 30,
+          life: 0.5, max: 0.5, size: 5 + Math.random() * 4,
+        });
+      }
+    }
+  }
+
+  function startGame() {
+    ensureAudio();
+    reset();
+    state = STATE.PLAY;
+    hideCard(startCard);
+    hideCard(reviveCard);
+    hideCard(overCard);
+    bird.vy = FLAP_V * 0.7;
+    coinHud.classList.add('on');
+    shieldHud.classList.add('on');
+    pauseHint.classList.add('on');
+    updateStarHud();
+    updateComboHud();
+  }
+
+  function die() {
+    if (state !== STATE.PLAY) return;
+    if (starTime > 0) return; // invincible star
+    if (shieldTime > 0) {
+      shieldTime = 0;
+      invulnTime = INVULN_AFTER_SHIELD;
+      shake = 10;
+      flashAlpha = 0.35;
+      bird.vy = FLAP_V * 0.9;
+      sfx.shieldHit();
+      addPopup('Shield saved you!', '#9fdcff');
+      for (let i = 0; i < 22; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 120 + Math.random() * 160;
+        sparkles.push({
+          x: bird.x, y: bird.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.45, max: 0.45, size: 2 + Math.random() * 2,
+        });
+      }
+      updateShieldHud();
+      return;
+    }
+    state = STATE.DEAD;
+    sfx.hit();
+    shake = 18;
+    flashAlpha = 0.8;
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 120 + Math.random() * 260;
+      particles.push({
+        x: bird.x, y: bird.y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 40,
+        life: 0.7 + Math.random() * 0.5,
+        max: 1.2,
+        color: ['#c084fc','#f0abfc','#f472b6','#fff1a8'][(Math.random()*4)|0],
+        size: 3 + Math.random() * 4,
+      });
+    }
+  }
+
+  function finishGameOver() {
+    if (state === STATE.OVER) return; // guard against double-taps
+    state = STATE.OVER;
+    sfx.die();
+    const isNewBest = score > best;
+    if (isNewBest) {
+      best = score;
+      try { localStorage.setItem('puppyWingsBest', String(best)); } catch(e) {}
+    }
+    coinTotal += runCoins;
+    try { localStorage.setItem('puppyWingsStars', String(coinTotal)); } catch(e) {}
+    finalScoreEl.textContent = score;
+    bestScoreEl.textContent = best;
+    runCoinsEl.textContent = runCoins;
+    coinTotalEl.textContent = coinTotal;
+    coinStartEl.textContent = coinTotal;
+    bestStart.textContent = best;
+    const medal = medalFor(score);
+    medalEl.textContent = '';
+    if (medal === 'PUPPY') {
+      const img = document.createElement('img');
+      img.src = AVATAR_SRC;
+      img.alt = '';
+      img.style.cssText = 'width:66px;height:66px;border-radius:50%;object-fit:cover;display:block;';
+      img.onerror = () => { medalEl.textContent = '\uD83C\uDFC5'; };
+      medalEl.appendChild(img);
+    } else {
+      medalEl.textContent = medal;
+    }
+    overTitleEl.textContent = isNewBest && score > 3 ? 'New Best!' : 'Game Over';
+    newBestRibbon.style.display = isNewBest && score > 3 ? 'block' : 'none';
+    coinHud.classList.remove('on');
+    shieldHud.classList.remove('on');
+    starHud.classList.remove('on');
+    comboHud.classList.remove('on');
+    if (comboBest > comboBestEver) {
+      comboBestEver = comboBest;
+      try { localStorage.setItem(COMBO_BEST_KEY, String(comboBestEver)); } catch (e) {}
+    }
+    bestComboEl.textContent = 'x' + comboBestEver;
+    pauseHint.classList.remove('on');
+    pauseOverlay.classList.remove('on');
+    showCard(overCard);
+  }
+
+  function medalFor(s) {
+    if (s >= 50) return '🏆';
+    if (s >= 25) return '🥇';
+    if (s >= 15) return '🥈';
+    if (s >= 8)  return '🥉';
+    return 'PUPPY';
+  }
+
+  function updateShieldHud() {
+    shieldCountEl.textContent = Math.ceil(Math.max(0, shieldTime)) + 's';
+  }
+  function updateStarHud() {
+    if (starTime > 0) {
+      starHud.classList.add('on');
+      starCountEl.textContent = Math.ceil(starTime) + 's';
+    } else {
+      starHud.classList.remove('on');
+    }
+  }
+  function updateComboHud() {
+    if (combo >= 3) {
+      comboHud.classList.add('on');
+      comboCountEl.textContent = 'x' + combo;
+      bumpHud(comboHud);
+    } else {
+      comboHud.classList.remove('on');
+    }
+  }
+  function saveTickets() { try { localStorage.setItem(TICKET_KEY, String(tickets)); } catch (e) {} }
+
+  function showCard(el) {
+    el.style.display = 'block';
+    requestAnimationFrame(() => el.classList.add('show'));
+  }
+  function hideCard(el) {
+    el.classList.remove('show');
+    setTimeout(() => { el.style.display = 'none'; }, 250);
+  }
+
+  // Daily reward modal on boot
+  renderDailyGrid();
+  if (isDailyClaimable()) showCard(dailyCard);
+
+  // Controls
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+      e.preventDefault();
+      if (state === STATE.OVER) { startGame(); return; }
+      if (state === STATE.REVIVE) return;
+      if (paused) return;
+      flap();
+    } else if (e.code === 'KeyR' && state === STATE.OVER) {
+      startGame();
+    } else if (e.code === 'KeyP') {
+      if (state === STATE.PLAY || state === STATE.DEAD) {
+        paused = !paused;
+        pauseOverlay.classList.toggle('on', paused);
+      }
+    }
+  });
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (state === STATE.OVER) { startGame(); return; }
+    if (state === STATE.REVIVE) return;
+    if (paused) { paused = false; pauseOverlay.classList.remove('on'); return; } // tap to resume
+    if (bonusActive && state === STATE.PLAY) { tapBonus(e); return; }
+    flap();
+  });
+  // no long-press menu on mobile; auto-pause when the tab/app goes to background
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && (state === STATE.PLAY || state === STATE.DEAD) && !paused) {
+      paused = true;
+      pauseOverlay.classList.add('on');
+    }
+  });
+  startBtn.addEventListener('click', startGame);
+  againBtn.addEventListener('click', startGame);
+  reviveBtn.addEventListener('click', buyRevive);
+  ticketBtn.addEventListener('click', useTicketRevive);
+  adBtn.addEventListener('click', watchAdRevive);
+  dailyBtn.addEventListener('click', () => { renderDailyGrid(); showCard(dailyCard); });
+  dailyClaimBtn.addEventListener('click', claimDaily);
+  dailyCloseBtn.addEventListener('click', () => hideCard(dailyCard));
+  giveUpBtn.addEventListener('click', () => { hideCard(reviveCard); finishGameOver(); });
+  const shareBtn = document.getElementById('shareBtn');
+  shareBtn.addEventListener('click', () => {
+    const text = `I scored ${score} in Puppy Wings! Best combo x${comboBestEver}. Caught ${bonesCaught} space bones. Can you beat me?`;
+    const page = location.href.split('?')[0];
+    const url = 'https://t.me/share/url?url=' + encodeURIComponent(page) + '&text=' + encodeURIComponent(text);
+    // inside Telegram the t.me link must go through openTelegramLink; window.open may be blocked
+    const w = window.Telegram && window.Telegram.WebApp;
+    if (w && typeof w.openTelegramLink === 'function') w.openTelegramLink(url);
+    else window.open(url, '_blank');
+  });
+
+  // --- Collision ------------------------------------------------------------
+  function circleRect(cx, cy, cr, rx, ry, rw, rh) {
+    const tx = Math.max(rx, Math.min(cx, rx + rw));
+    const ty = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - tx, dy = cy - ty;
+    return dx * dx + dy * dy <= cr * cr;
+  }
+
+  // --- Update ---------------------------------------------------------------
+  function update(dtRaw) {
+    if (paused) return;
+    const dt = dtRaw;
+    elapsed += dtRaw;
+
+    for (const c of clouds) {
+      c.x -= c.speed * dtRaw * 0.4;
+      if (c.x < -60) { c.x = VW + 20; c.y = 40 + Math.random() * (PLAY_H * 0.55); c.s = 0.4 + Math.random() * 0.9; }
+    }
+    for (const s of stars) s.twinkle += dtRaw * 3;
+
+    if (state === STATE.READY) {
+      bird.y = VH * 0.45 + Math.sin(elapsed * 3) * 8;
+      bird.rot = Math.sin(elapsed * 3) * 0.08;
+      groundOffset = (groundOffset + SCROLL_V0 * dtRaw) % 48;
+      return;
+    }
+
+    if (state === STATE.REVIVE) {
+      if (!adWatching) reviveTimer -= dtRaw;
+      reviveCountEl.textContent = Math.ceil(Math.max(0, reviveTimer));
+      if (reviveBarEl) reviveBarEl.style.width = (Math.max(0, reviveTimer) / REVIVE_COUNTDOWN * 100) + '%';
+      if (reviveTimer <= 0) {
+        hideCard(reviveCard);
+        finishGameOver();
+      }
+      // let the world settle behind the card
+      updateFx(dtRaw);
+      return;
+    }
+
+    // Difficulty ramp — gentle curve, bounded
+    const ramp = Math.min(1, score / 30);
+    scrollV     = SCROLL_V0     + (SCROLL_VMAX     - SCROLL_V0)     * ramp;
+    pipeGap     = PIPE_GAP0     - (PIPE_GAP0       - PIPE_GAPMIN)   * ramp;
+    pipeSpacing = PIPE_SPACING0 - (PIPE_SPACING0   - PIPE_SPACINGMIN)* ramp;
+
+    if (state === STATE.PLAY) {
+      if (bonusActive) {
+        updateBonus(dt);
+      } else {
+        bird.vy = Math.min(MAX_VY, bird.vy + GRAVITY * dt);
+        bird.y += bird.vy * dt;
+        bird.rot = Math.max(-0.5, Math.min(1.2, bird.vy / 500));
+        bird.flapPhase = Math.max(0, bird.flapPhase - dt * 3);
+
+        timeSinceSpawn += dt;
+        const spawnInterval = pipeSpacing / scrollV;
+        if (timeSinceSpawn >= spawnInterval) {
+          timeSinceSpawn = 0;
+          spawnPipe();
+        }
+        for (const p of pipes) p.x -= scrollV * dt;
+        for (const c of coins) c.x -= scrollV * dt;
+        for (const pu of powerups) pu.x -= scrollV * dt;
+
+        // Gate pass + Perfect! detection
+        for (let i = pipes.length - 1; i >= 0; i--) {
+          const p = pipes[i];
+          if (!p.passed && p.x + PIPE_W < bird.x) {
+            p.passed = true;
+            score++;
+            gatesPassed++;
+            combo++;
+            if (combo > comboBest) comboBest = combo;
+            sfx.score();
+            hud.textContent = score;
+            bumpHud(hud);
+            updateComboHud();
+            if (combo % COMBO_MILESTONE === 0) {
+              score += COMBO_BONUS;
+              hud.textContent = score;
+              addPopup('COMBO x' + combo + '! +' + COMBO_BONUS, '#ff9f43');
+              sfx.combo();
+            }
+            if (gatesPassed % BONUS_EVERY === 0 && !bonusActive) startBonus();
+            const dTop = bird.y - (p.gapY - p.gapH / 2);
+            const dBot = (p.gapY + p.gapH / 2) - bird.y;
+            const edge = Math.min(dTop, dBot);
+            if (edge < PERFECT_MARGIN + bird.r) {
+              perfects++;
+              score++;
+              sfx.perfect();
+              hud.textContent = score;
+              bumpHud(hud);
+              bankCoins(1);
+              addPopup('Perfect! +1⭐', '#ffd93a');
+            }
+          }
+          if (p.x + PIPE_W < -30) pipes.splice(i, 1);
+        }
+        if (hud.textContent === '' && score === 0) hud.textContent = '0';
+
+        // Coins: collect + cull
+        for (let i = coins.length - 1; i >= 0; i--) {
+          const c = coins[i];
+          c.phase += dtRaw * 4;
+          if (!c.taken) {
+            const dx = bird.x - c.x, dy = bird.y - c.y;
+            if (dx * dx + dy * dy < (bird.r + COIN_R) * (bird.r + COIN_R)) {
+              c.taken = true;
+              score++;
+              sfx.coin();
+              hud.textContent = score;
+              bumpHud(hud);
+              bankCoins(1);
+              for (let k = 0; k < 8; k++) {
+                const a = Math.random() * Math.PI * 2;
+                sparkles.push({
+                  x: c.x, y: c.y,
+                  vx: Math.cos(a) * 120, vy: Math.sin(a) * 120 - 30,
+                  life: 0.4, max: 0.4, size: 2 + Math.random() * 2,
+                });
+              }
+            }
+          }
+          if (c.x < -30 || c.taken) coins.splice(i, 1);
+        }
+
+        // Power-ups: shield or invincible star — collect + cull
+        for (let i = powerups.length - 1; i >= 0; i--) {
+          const pu = powerups[i];
+          pu.phase += dtRaw * 3;
+          const dx = bird.x - pu.x, dy = bird.y - pu.y;
+          if (dx * dx + dy * dy < (bird.r + POWERUP_R) * (bird.r + POWERUP_R)) {
+            if (pu.kind === 'star') {
+              starTime = STAR_DUR;
+              updateStarHud();
+              sfx.star();
+              flashAlpha = Math.max(flashAlpha, 0.3);
+              addPopup('INVINCIBLE!', '#ffd93a');
+              for (let k = 0; k < 20; k++) {
+                const a = Math.random() * Math.PI * 2;
+                const sp = 100 + Math.random() * 180;
+                sparkles.push({
+                  x: pu.x, y: pu.y,
+                  vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                  life: 0.6, max: 0.6, size: 2 + Math.random() * 3,
+                });
+              }
+            } else {
+              shieldTime = SHIELD_DUR;
+              updateShieldHud();
+              sfx.power();
+              flashAlpha = Math.max(flashAlpha, 0.25);
+              addPopup('Shield ON!', '#9fdcff');
+              for (let k = 0; k < 16; k++) {
+                const a = Math.random() * Math.PI * 2;
+                sparkles.push({
+                  x: pu.x, y: pu.y,
+                  vx: Math.cos(a) * 160, vy: Math.sin(a) * 160,
+                  life: 0.5, max: 0.5, size: 2 + Math.random() * 2,
+                });
+              }
+            }
+            powerups.splice(i, 1);
+            continue;
+          }
+          if (pu.x < -30) powerups.splice(i, 1);
+        }
+
+        if (shieldTime > 0) {
+          shieldTime = Math.max(0, shieldTime - dtRaw);
+          updateShieldHud();
+        }
+        if (starTime > 0) {
+          starTime = Math.max(0, starTime - dtRaw);
+          updateStarHud();
+          if (starTime > 0 && Math.random() < 0.6) {
+            sparkles.push({
+              x: bird.x + (Math.random() - 0.5) * 30,
+              y: bird.y + (Math.random() - 0.5) * 30,
+              vx: -40 - Math.random() * 40, vy: (Math.random() - 0.5) * 60,
+              life: 0.5, max: 0.5, size: 2 + Math.random() * 2.5,
+            });
+          }
+        }
+        if (invulnTime > 0) invulnTime = Math.max(0, invulnTime - dtRaw);
+
+        // Collision (skipped during post-shield grace or invincible star)
+        const godMode = invulnTime > 0 || starTime > 0;
+        if (!godMode) {
+          for (const p of pipes) {
+            const topH = p.gapY - p.gapH / 2;
+            const botY = p.gapY + p.gapH / 2;
+            if (circleRect(bird.x, bird.y, bird.r, p.x, 0, PIPE_W, topH) ||
+                circleRect(bird.x, bird.y, bird.r, p.x, botY, PIPE_W, PLAY_H - botY)) {
+              die();
+              break;
+            }
+          }
+          if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = 0; }
+          if (bird.y + bird.r > PLAY_H) { bird.y = PLAY_H - bird.r; die(); }
+        } else {
+          if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = 0; }
+          if (bird.y + bird.r > PLAY_H) { bird.y = PLAY_H - bird.r; bird.vy = Math.min(bird.vy, 0); }
+        }
+
+        groundOffset = (groundOffset + scrollV * dt) % 48;
+      }
+    } else if (state === STATE.DEAD) {
+      bird.vy = Math.min(MAX_VY, bird.vy + GRAVITY * 1.4 * dt);
+      bird.y += bird.vy * dt;
+      bird.rot = Math.min(1.6, bird.rot + dt * 3);
+      if (bird.y + bird.r >= PLAY_H) {
+        bird.y = PLAY_H - bird.r;
+        bird.vy = 0;
+        offerReviveOrGameOver();
+      }
+    }
+
+    updateFx(dtRaw);
+  }
+
+  function updateFx(dtRaw) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.vy += 700 * dtRaw;
+      p.x += p.vx * dtRaw;
+      p.y += p.vy * dtRaw;
+      p.life -= dtRaw;
+      if (p.life <= 0 || p.y > PLAY_H + 30) particles.splice(i, 1);
+    }
+    for (let i = trailPuffs.length - 1; i >= 0; i--) {
+      const t = trailPuffs[i];
+      t.x += t.vx * dtRaw;
+      t.y += t.vy * dtRaw;
+      t.life -= dtRaw;
+      if (t.life <= 0) trailPuffs.splice(i, 1);
+    }
+    for (let i = sparkles.length - 1; i >= 0; i--) {
+      const s = sparkles[i];
+      s.vx *= (1 - dtRaw * 1.5);
+      s.vy *= (1 - dtRaw * 1.5);
+      s.x += s.vx * dtRaw;
+      s.y += s.vy * dtRaw;
+      s.life -= dtRaw;
+      if (s.life <= 0) sparkles.splice(i, 1);
+    }
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const u = popups[i];
+      u.y -= 34 * dtRaw;
+      u.life -= dtRaw;
+      if (u.life <= 0) popups.splice(i, 1);
+    }
+
+    if (shake > 0) shake = Math.max(0, shake - dtRaw * 40);
+    if (flashAlpha > 0) flashAlpha = Math.max(0, flashAlpha - dtRaw * 2.2);
+    shakeSeed += dtRaw;
+  }
+
+  // --- Vector art: angel puppy ----------------------------------------------
+  // Fluffy white puppy with chubby flapping angel wings.
+  // wingFlap: 0..1 (flap power), t: seconds (idle flutter)
+  // --- Vector art: flying angel puppy (refined, v4.3) ---------------------------
+  // Full-body side-view puppy (faces right). Refinements over the rough pass:
+  // radial-gradient fur volume, fur-strand edge strokes, layered feathered wings
+  // with drop shadow + separated primaries, gradient nose/ears/paws, sparkle eyes.
+  function drawPuppy(c, x, y, R, blink, wingFlap, t) {
+    c.save();
+    c.translate(x, y);
+    const breathe = 1 + Math.sin(t * 3) * 0.012;
+    c.scale(breathe, breathe);
+    const INK = '#3a2c1e';
+    const lw = Math.max(1, R * 0.05);
+
+    // soft radial fur volume, lit from upper-left
+    function furGrad(r) {
+      const g = c.createRadialGradient(-r * 0.35, -r * 0.45, r * 0.1, 0, 0, r * 1.3);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.62, '#fdf6ea');
+      g.addColorStop(1, '#eeddc2');
+      return g;
+    }
+
+    // fluffy silhouette: core ellipse + scalloped bump ring, one gradient fill
+    function fluffy(rx, ry, n, bumpR) {
+      c.fillStyle = furGrad(Math.max(rx, ry));
+      c.beginPath();
+      c.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      c.fill();
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + 0.35;
+        c.beginPath();
+        c.arc(Math.cos(a) * rx * 0.97, Math.sin(a) * ry * 0.97, bumpR, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // short curved fur strands along a silhouette arc (a0..a1), e.g. skipping the belly
+    function furStrokes(rx, ry, n, len, alpha, a0, a1) {
+      c.strokeStyle = 'rgba(196,176,148,' + alpha + ')';
+      c.lineWidth = lw;
+      c.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i / Math.max(1, n - 1)) * (a1 - a0);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        c.beginPath();
+        c.moveTo(ca * rx, sa * ry);
+        c.quadraticCurveTo(
+          ca * (rx - len * 0.6) - sa * len * 0.28,
+          sa * (ry - len * 0.6) + ca * len * 0.28,
+          ca * (rx - len), sa * (ry - len));
+        c.stroke();
+      }
+    }
+
+    // layered feather wing: overlapping white feathers fanning up-back
+    // base/tip = gradient colors, s = scale
+    function wing(sx, sy, s, base, tip) {
+      c.save();
+      c.translate(sx, sy);
+      c.rotate(-(0.10 + wingFlap * 0.85) + Math.sin(t * 9) * 0.05);
+      c.scale(s, s);
+      const W = R;
+      // soft shadow grounding the wing on the body
+      const sh = c.createRadialGradient(0, 0, 0, 0, 0, W * 0.75);
+      sh.addColorStop(0, 'rgba(60,40,90,.20)');
+      sh.addColorStop(1, 'rgba(60,40,90,0)');
+      c.fillStyle = sh;
+      c.beginPath();
+      c.arc(0, 0, W * 0.75, 0, Math.PI * 2);
+      c.fill();
+      // feathers: [angle, dist, len, wid] — long primaries first (drawn behind)
+      const feathers = [
+        [-2.62, 0.98, 1.02, 0.30], [-2.36, 0.95, 1.06, 0.30],
+        [-2.10, 0.91, 1.04, 0.30], [-1.84, 0.85, 0.94, 0.29],
+        [-2.48, 0.64, 0.74, 0.32], [-2.20, 0.62, 0.76, 0.32],
+        [-1.92, 0.58, 0.70, 0.31], [-2.34, 0.36, 0.50, 0.30],
+        [-2.04, 0.35, 0.52, 0.30], [-1.74, 0.32, 0.46, 0.29],
+      ];
+      for (const ft of feathers) {
+        const a = ft[0], d = ft[1], len = ft[2], wid = ft[3];
+        c.save();
+        c.translate(Math.cos(a) * W * d, Math.sin(a) * W * d);
+        c.rotate(a + Math.PI / 2);
+        const fg = c.createLinearGradient(0, -W * len * 0.5, 0, W * len * 0.5);
+        fg.addColorStop(0, base);
+        fg.addColorStop(1, tip);
+        c.fillStyle = fg;
+        c.beginPath();
+        c.ellipse(0, 0, W * wid * 0.5, W * len * 0.5, 0, 0, Math.PI * 2);
+        c.fill();
+        c.strokeStyle = 'rgba(168,183,208,.6)';
+        c.lineWidth = lw * 0.9;
+        c.stroke();
+        c.restore();
+      }
+      c.restore();
+    }
+
+    const bx = -R * 0.15;
+    const brx = R * 1.02, bry = R * 0.74;
+
+    // tail puffs (wag)
+    c.fillStyle = '#fbf3e4';
+    const wag = Math.sin(t * 6) * R * 0.08;
+    for (const tp of [[-1.18, -0.10, 0.30], [-1.34, -0.24, 0.23], [-1.46, -0.06, 0.18]]) {
+      c.beginPath();
+      c.arc(bx + tp[0] * R + R * 0.15, tp[1] * R + wag, tp[2] * R, 0, Math.PI * 2);
+      c.fill();
+    }
+
+    // far wing (smaller, cooler) before body
+    wing(bx + R * 0.02, -R * 0.52, 0.72, '#f4f6fb', '#d3dcee');
+
+    // body
+    c.save();
+    c.translate(bx, 0);
+    c.fillStyle = furGrad(Math.max(brx, bry));
+    c.beginPath();
+    c.ellipse(0, 0, brx, bry, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(206,178,142,.28)';
+    c.beginPath();
+    c.ellipse(0, bry * 0.55, brx * 0.60, bry * 0.42, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    // near wing with soft shadow on the body
+    wing(bx + R * 0.15, -R * 0.55, 1.0, '#ffffff', '#dfe7f5');
+
+    // head
+    const hx = R * 0.78, hy = -R * 0.35, hr = R * 0.70;
+    c.save();
+    c.translate(hx, hy);
+    fluffy(hr, hr, 14, R * 0.13);
+    furStrokes(hr, hr, 12, R * 0.20, 0.32, Math.PI * 0.7, Math.PI * 2.3);
+
+    // floppy ear (gradient + edge)
+    const eg = c.createLinearGradient(0, -hr * 1.1, 0, -hr * 0.2);
+    eg.addColorStop(0, '#fdf6ea');
+    eg.addColorStop(1, '#e3d0b4');
+    c.fillStyle = eg;
+    c.beginPath();
+    c.ellipse(-hr * 0.72, -hr * 0.72, hr * 0.30, hr * 0.62, 0.6, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = 'rgba(170,150,125,.4)';
+    c.lineWidth = lw * 0.8;
+    c.stroke();
+
+    // muzzle patch
+    c.fillStyle = 'rgba(255,255,255,.75)';
+    c.beginPath();
+    c.ellipse(hr * 0.42, hr * 0.34, hr * 0.44, hr * 0.36, 0, 0, Math.PI * 2);
+    c.fill();
+
+    // eyes
+    const e1x = -hr * 0.10, e2x = hr * 0.42, ey = -hr * 0.14;
+    if (blink) {
+      c.strokeStyle = INK;
+      c.lineWidth = Math.max(1.5, R * 0.07);
+      c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(e1x - hr * 0.18, ey);
+      c.quadraticCurveTo(e1x, ey + hr * 0.06, e1x + hr * 0.18, ey);
+      c.moveTo(e2x - hr * 0.18, ey);
+      c.quadraticCurveTo(e2x, ey + hr * 0.06, e2x + hr * 0.18, ey);
+      c.stroke();
+    } else {
+      for (const ex of [e1x, e2x]) {
+        c.strokeStyle = 'rgba(58,44,30,.55)';
+        c.lineWidth = lw * 0.9;
+        c.beginPath();
+        c.ellipse(ex, ey, hr * 0.21, hr * 0.25, 0, Math.PI * 1.05, Math.PI * 1.95);
+        c.stroke();
+        c.fillStyle = '#fff';
+        c.beginPath();
+        c.ellipse(ex, ey, hr * 0.20, hr * 0.24, 0, 0, Math.PI * 2);
+        c.fill();
+        const pg = c.createRadialGradient(ex - hr * 0.02, ey - hr * 0.05, hr * 0.02, ex, ey, hr * 0.13);
+        pg.addColorStop(0, '#4a3a2e');
+        pg.addColorStop(1, '#241a12');
+        c.fillStyle = pg;
+        c.beginPath();
+        c.arc(ex + hr * 0.02, ey + hr * 0.03, hr * 0.115, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = 'rgba(255,255,255,.95)';
+        c.beginPath();
+        c.arc(ex - hr * 0.03, ey - hr * 0.05, hr * 0.05, 0, Math.PI * 2);
+        c.fill();
+        c.beginPath();
+        c.arc(ex + hr * 0.06, ey + hr * 0.07, hr * 0.028, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // blush
+    c.fillStyle = 'rgba(255,150,160,.45)';
+    c.beginPath();
+    c.ellipse(hr * 0.10, hr * 0.32, hr * 0.16, hr * 0.11, 0, 0, Math.PI * 2);
+    c.fill();
+
+    // nose (gradient + highlight)
+    const ng = c.createRadialGradient(hr * 0.80, hr * 0.16, hr * 0.02, hr * 0.86, hr * 0.22, hr * 0.16);
+    ng.addColorStop(0, '#a06a48');
+    ng.addColorStop(1, '#5f3a26');
+    c.fillStyle = ng;
+    c.beginPath();
+    c.ellipse(hr * 0.86, hr * 0.22, hr * 0.155, hr * 0.125, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,.7)';
+    c.beginPath();
+    c.arc(hr * 0.81, hr * 0.17, hr * 0.035, 0, Math.PI * 2);
+    c.fill();
+
+    // happy open mouth + tongue
+    c.fillStyle = '#7a4a35';
+    c.beginPath();
+    c.ellipse(hr * 0.66, hr * 0.50, hr * 0.20, hr * 0.155, 0, 0, Math.PI * 2);
+    c.fill();
+    const tg = c.createLinearGradient(0, hr * 0.45, 0, hr * 0.66);
+    tg.addColorStop(0, '#ff9dab');
+    tg.addColorStop(1, '#f2667f');
+    c.fillStyle = tg;
+    c.beginPath();
+    c.ellipse(hr * 0.66, hr * 0.55, hr * 0.115, hr * 0.10, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    // paws: front pair reaching forward, back pair trailing
+    function paw(px, py, prx, pry, rot) {
+      c.save();
+      c.translate(px, py);
+      c.rotate(rot);
+      c.fillStyle = furGrad(Math.max(prx, pry) * 1.4);
+      c.beginPath();
+      c.ellipse(0, 0, prx, pry, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = 'rgba(196,176,148,.5)';
+      c.lineWidth = lw * 0.8;
+      c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(-prx * 0.3, -pry * 0.5);
+      c.quadraticCurveTo(-prx * 0.3, 0, -prx * 0.3, pry * 0.5);
+      c.moveTo(prx * 0.3, -pry * 0.5);
+      c.quadraticCurveTo(prx * 0.3, 0, prx * 0.3, pry * 0.5);
+      c.stroke();
+      c.restore();
+    }
+    paw(R * 0.78, R * 0.60, R * 0.20, R * 0.30, -0.3);
+    paw(R * 0.46, R * 0.66, R * 0.20, R * 0.30, -0.3);
+    paw(-R * 0.88, R * 0.56, R * 0.22, R * 0.30, 0.35);
+
+    c.restore();
+  }
+
+  // Bone — the bonus-round target
+  // Bone — the bonus-round target ("catch the bones!")
+  function drawBone(c, x, y, R, t) {
+    c.save();
+    c.translate(x, y + Math.sin(t) * 3);
+    c.rotate(Math.sin(t * 0.7) * 0.25);
+    const grow = Math.min(1, t * 4); // pop-in
+    c.scale(grow, grow);
+    c.fillStyle = '#fff6e8';
+    c.strokeStyle = '#e3cfae';
+    c.lineWidth = Math.max(1.5, R * 0.08);
+    // bar
+    c.beginPath();
+    c.rect(-R * 0.85, -R * 0.26, R * 1.7, R * 0.52);
+    c.fill(); c.stroke();
+    // knobs
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      c.beginPath();
+      c.arc(sx * R * 0.85, sy * R * 0.30, R * 0.30, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+    }
+    // shine
+    c.strokeStyle = 'rgba(255,255,255,.9)';
+    c.lineWidth = Math.max(1, R * 0.07);
+    c.beginPath();
+    c.moveTo(-R * 0.5, -R * 0.08); c.lineTo(R * 0.3, -R * 0.08);
+    c.stroke();
+    c.restore();
+  }
+  // --- Render ---------------------------------------------------------------
+  function drawSky() {
+    const sky = ctx.createLinearGradient(0, 0, 0, PLAY_H);
+    sky.addColorStop(0, '#060a20');
+    sky.addColorStop(0.55, '#141b45');
+    sky.addColorStop(1, '#2c1a5e');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, VW, PLAY_H);
+    // soft nebula blobs
+    const nebs = [
+      [0.22, 0.28, 150, '168,85,247', 0.16],
+      [0.80, 0.55, 170, '103,232,249', 0.10],
+      [0.55, 0.85, 140, '240,171,252', 0.12],
+    ];
+    for (const nb of nebs) {
+      const g = ctx.createRadialGradient(VW * nb[0], PLAY_H * nb[1], 0, VW * nb[0], PLAY_H * nb[1], nb[2]);
+      g.addColorStop(0, 'rgba(' + nb[3] + ',' + nb[4] + ')');
+      g.addColorStop(1, 'rgba(' + nb[3] + ',0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, VW, PLAY_H);
+    }
+  }
+
+  function drawStars() {
+    for (const s of stars) {
+      const twink = 0.45 + 0.35 * Math.sin(s.twinkle);
+      ctx.globalAlpha = twink;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCloud(c) {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#9d8fe0';
+    const s = c.s;
+    ctx.beginPath();
+    ctx.arc(c.x,          c.y,       18 * s, 0, Math.PI * 2);
+    ctx.arc(c.x + 18 * s, c.y - 6*s, 22 * s, 0, Math.PI * 2);
+    ctx.arc(c.x + 38 * s, c.y,       18 * s, 0, Math.PI * 2);
+    ctx.arc(c.x + 22 * s, c.y + 8*s, 18 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawStarCoin(cx, cy, r, rot, fill) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+      const a2 = a + Math.PI / 5;
+      ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      ctx.lineTo(Math.cos(a2) * r * 0.45, Math.sin(a2) * r * 0.45);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCoin(c) {
+    ctx.save();
+    ctx.translate(c.x, c.y + Math.sin(c.phase * 0.5) * 3);
+    ctx.globalAlpha = 0.45;
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, COIN_R + 8);
+    glow.addColorStop(0, 'rgba(255,207,58,.8)');
+    glow.addColorStop(1, 'rgba(255,207,58,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, COIN_R + 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    drawStarCoin(0, 0, COIN_R, c.phase * 0.4, '#ffd93a');
+    drawStarCoin(0, 0, COIN_R * 0.55, -c.phase * 0.4, '#fff3a8');
+    ctx.restore();
+  }
+
+  function drawPowerup(pu) {
+    if (pu.kind === 'star') { drawStarPowerup(pu); return; }
+    ctx.save();
+    const bob = Math.sin(pu.phase) * 4;
+    ctx.translate(pu.x, pu.y + bob);
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#6fd6ff';
+    ctx.beginPath();
+    ctx.arc(0, 0, POWERUP_R + 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(-4, -4, 2, 0, 0, POWERUP_R);
+    g.addColorStop(0, '#e8f8ff');
+    g.addColorStop(0.5, '#7fd0ff');
+    g.addColorStop(1, '#2272c7');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, POWERUP_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(6, -3);
+    ctx.lineTo(6, 2);
+    ctx.lineTo(0, 7);
+    ctx.lineTo(-6, 2);
+    ctx.lineTo(-6, -3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawShieldBubble() {
+    if (shieldTime <= 0) return;
+    const pulse = 0.85 + 0.15 * Math.sin(elapsed * 10);
+    const fadeTail = shieldTime < 1.5 ? (0.3 + 0.7 * Math.abs(Math.sin(elapsed * 20))) : 1;
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.globalAlpha = 0.35 * fadeTail;
+    const g = ctx.createRadialGradient(0, 0, SHIELD_PULSE_R * 0.4, 0, 0, SHIELD_PULSE_R * pulse);
+    g.addColorStop(0, 'rgba(130,210,255,0)');
+    g.addColorStop(0.6, 'rgba(130,210,255,.45)');
+    g.addColorStop(1, 'rgba(130,210,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, SHIELD_PULSE_R * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.75 * fadeTail;
+    ctx.strokeStyle = 'rgba(180,230,255,.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, SHIELD_PULSE_R * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // Invincible-star pickup: radiant golden star, clearly bigger than coin star-coins
+  function drawStarPowerup(pu) {
+    ctx.save();
+    const bob = Math.sin(pu.phase) * 4;
+    ctx.translate(pu.x, pu.y + bob);
+    const R = POWERUP_R + 4;
+    const rot = pu.phase * 0.5;
+    ctx.globalAlpha = 0.5;
+    const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, R + 16);
+    glow.addColorStop(0, 'rgba(255,217,58,.9)');
+    glow.addColorStop(1, 'rgba(255,217,58,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, R + 16, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.rotate(rot);
+    ctx.fillStyle = 'rgba(255,236,150,.85)';
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, -R - 10); ctx.lineTo(3.5, -R - 2); ctx.lineTo(-3.5, -R - 2);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    drawStarCoin(0, 0, R, rot, '#ffcf3a');
+    drawStarCoin(0, 0, R * 0.55, -rot, '#fff6c8');
+    ctx.restore();
+  }
+
+  // Golden aura while the invincible star is active
+  function drawStarAura() {
+    if (starTime <= 0) return;
+    const pulse = 1 + 0.08 * Math.sin(elapsed * 12);
+    const blink = starTime < 1.5 ? (0.4 + 0.6 * Math.abs(Math.sin(elapsed * 18))) : 1;
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.rotate(elapsed * 2.2);
+    ctx.globalAlpha = 0.9 * blink;
+    ctx.strokeStyle = '#ffd93a';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 34 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.28 * blink;
+    ctx.fillStyle = '#ffd93a';
+    ctx.beginPath();
+    ctx.arc(0, 0, 34 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSparkles() {
+    for (const s of sparkles) {
+      const a = Math.max(0, s.life / s.max);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff8c8';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPopups() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '800 22px "Baloo 2", -apple-system, Segoe UI, system-ui, sans-serif';
+    for (const u of popups) {
+      const a = Math.max(0, Math.min(1, u.life / u.max * 1.6));
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,0,0,.45)';
+      ctx.strokeText(u.text, u.x, u.y);
+      ctx.fillStyle = u.color;
+      ctx.fillText(u.text, u.x, u.y);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // circular-cropped avatar image; vector puppy only if the image isn't ready
+  const AVATAR_R = 24;
+  function drawPlayer() {
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.rotate(bird.rot);
+    // soft purple glow
+    ctx.globalAlpha = 0.30;
+    ctx.fillStyle = '#c084fc';
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // pop on flap
+    const pop = bird.flapPhase > 0 ? 1 + bird.flapPhase * 0.15 : 1;
+    if (puppyImg.complete && puppyImg.naturalWidth > 0) {
+      ctx.save();
+      ctx.scale(pop, pop);
+      // soft shadow disc behind the avatar
+      ctx.save();
+      ctx.shadowColor = 'rgba(168,85,247,.55)';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = '#1a1440';
+      ctx.beginPath();
+      ctx.arc(0, 0, AVATAR_R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      // circular crop
+      ctx.beginPath();
+      ctx.arc(0, 0, AVATAR_R, 0, Math.PI * 2);
+      ctx.clip();
+      const iw = puppyImg.naturalWidth, ih = puppyImg.naturalHeight;
+      const sc = (AVATAR_R * 2) / Math.min(iw, ih);
+      ctx.drawImage(puppyImg, -iw * sc / 2, -ih * sc / 2, iw * sc, ih * sc);
+      ctx.restore();
+      // thin light ring
+      ctx.save();
+      ctx.scale(pop, pop);
+      ctx.strokeStyle = 'rgba(255,255,255,.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, AVATAR_R - 1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.scale(pop, pop);
+      const blink = (elapsed % 3.6) < 0.12;
+      const wingFlap = Math.min(1, bird.flapPhase * 1.2 + 0.25);
+      drawPuppy(ctx, 0, 0, 19, blink, wingFlap, elapsed);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+
+  function drawBones() {
+    for (const b of bones) {
+      drawBone(ctx, b.x, b.y, BONE_R, b.wob);
+    }
+  }
+
+  function drawPipe(p) {
+    const topH = p.gapY - p.gapH / 2;
+    const botY = p.gapY + p.gapH / 2;
+    const botH = PLAY_H - botY;
+
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#a855f7';
+    ctx.fillRect(p.x - 6, 0, PIPE_W + 12, topH);
+    ctx.fillRect(p.x - 6, botY, PIPE_W + 12, botH);
+    ctx.restore();
+
+    const grad = ctx.createLinearGradient(p.x, 0, p.x + PIPE_W, 0);
+    grad.addColorStop(0,   '#5b21b6');
+    grad.addColorStop(0.5, '#a855f7');
+    grad.addColorStop(1,   '#4c1d95');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(p.x, 0, PIPE_W, topH);
+    ctx.fillRect(p.x, botY, PIPE_W, botH);
+
+    ctx.fillStyle = '#2e1065';
+    ctx.fillRect(p.x - 4, topH - 18, PIPE_W + 8, 18);
+    ctx.fillRect(p.x - 4, botY, PIPE_W + 8, 18);
+    ctx.fillStyle = '#c084fc';
+    ctx.fillRect(p.x - 4, topH - 18, PIPE_W + 8, 4);
+    ctx.fillRect(p.x - 4, botY, PIPE_W + 8, 4);
+
+    ctx.fillStyle = 'rgba(255,255,255,.28)';
+    ctx.fillRect(p.x + 8, 0, 6, topH);
+    ctx.fillRect(p.x + 8, botY, 6, botH);
+  }
+
+  function drawGround() {
+    const y = PLAY_H;
+    ctx.fillStyle = '#241d3d';
+    ctx.fillRect(0, y, VW, GROUND_H);
+    const grad = ctx.createLinearGradient(0, y, 0, y + 24);
+    grad.addColorStop(0, '#a855f7');
+    grad.addColorStop(1, '#5b21b6');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, VW, 24);
+    ctx.fillStyle = '#171226';
+    for (let x = -groundOffset; x < VW; x += 48) {
+      ctx.fillRect(x, y + 30, 24, 6);
+      ctx.fillRect(x + 24, y + 46, 24, 6);
+      ctx.fillRect(x, y + 62, 24, 6);
+      ctx.fillRect(x + 24, y + 78, 24, 6);
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const a = Math.max(0, p.life / p.max);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTrail() {
+    for (const t of trailPuffs) {
+      const a = Math.max(0, t.life / t.max) * 0.35;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, VW, VH);
+
+    drawSky();
+    drawStars();
+
+    let sx = 0, sy = 0;
+    if (shake > 0) {
+      sx = (Math.sin(shakeSeed * 80) * shake) * (Math.random() * 0.5 + 0.5);
+      sy = (Math.cos(shakeSeed * 70) * shake) * (Math.random() * 0.5 + 0.5);
+    }
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    for (const c of clouds) drawCloud(c);
+    drawTrail();
+    for (const pw of powerups) drawPowerup(pw);
+    for (const co of coins) drawCoin(co);
+    for (const pi of pipes) drawPipe(pi);
+    drawBones();
+    drawGround();
+    drawShieldBubble();
+    drawStarAura();
+    drawPlayer();
+    drawSparkles();
+    drawPopups();
+    drawParticles();
+
+    ctx.restore();
+
+    if (flashAlpha > 0) {
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, VW, VH);
+      ctx.globalAlpha = 1;
+    }
+
+    if (bonusActive) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '800 24px "Baloo 2", -apple-system, Segoe UI, system-ui, sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(0,0,0,.4)';
+      const label = 'BONUS! ' + Math.ceil(Math.max(0, bonusTime)) + 's';
+      ctx.strokeText(label, VW / 2, 110);
+      ctx.fillStyle = '#8fd694';
+      ctx.fillText(label, VW / 2, 110);
+      ctx.restore();
+    }
+
+    if (state === STATE.READY) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      const bobY = Math.sin(elapsed * 4) * 6;
+      ctx.fillStyle = 'rgba(255,255,255,.95)';
+      ctx.strokeStyle = 'rgba(0,0,0,.25)';
+      ctx.lineWidth = 4;
+      ctx.font = '800 30px "Baloo 2", -apple-system, Segoe UI, system-ui, sans-serif';
+      ctx.strokeText('Tap to Fly', VW / 2, VH * 0.24 + bobY);
+      ctx.fillText('Tap to Fly', VW / 2, VH * 0.24 + bobY);
+      ctx.font = '600 15px -apple-system, Segoe UI, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,.75)';
+      ctx.fillText('Grab stars - shield saves you once', VW / 2, VH * 0.24 + 34 + bobY);
+      ctx.restore();
+    }
+  }
+
+  // --- Main loop ------------------------------------------------------------
+  let last = performance.now();
+  function frame(now) {
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame((t) => { last = t; frame(t); });
+})();
+</script>
+</body>
+</html>
