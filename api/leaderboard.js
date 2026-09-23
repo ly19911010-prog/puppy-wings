@@ -167,6 +167,23 @@ module.exports = async (req, res) => {
       return;
     }
 
+    if (req.method === 'DELETE') {
+      // Admin cleanup (e.g. removing test entries): guarded by STATS_KEY, same as /api/stats.
+      const key = (req.query && req.query.key) || '';
+      if (!process.env.STATS_KEY || key !== process.env.STATS_KEY) {
+        res.status(403).json({ error: 'forbidden' }); return;
+      }
+      const member = cleanName((req.query && req.query.member) || '').slice(0, 80);
+      if (!member) { res.status(200).json({ ok: false }); return; }
+      await pipeline(k, [
+        ['ZREM', ALL_KEY, member],
+        ['ZREM', `pw:lb:daily:${shanghaiDay()}`, member],
+        ['HDEL', NAMES_KEY, member],
+      ]);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     if (req.method === 'GET') {
       const board = (req.query && req.query.board) === 'daily' ? 'daily' : 'all';
       const limit = Math.min(Math.max(parseInt((req.query && req.query.limit) || '20', 10) || 20, 1), 50);
