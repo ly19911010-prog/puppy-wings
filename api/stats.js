@@ -45,6 +45,6 @@ module.exports = async (req, res) => {
     }
     res.status(200).json({ days: out });
   } catch (err) {
-    res.status(502).json({ error: 'kv read failed' });
+    res.status(502).json({ error: 'kv read failed', detail: String((err && err.message) || err).slice(0, 300) });
   }
 };
