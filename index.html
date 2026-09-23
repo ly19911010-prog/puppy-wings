@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Puppy Wings v4.9.0 — og:image points to production vercel.app domain -->
+<!-- Puppy Wings v4.9.1 — own analytics beacon (/api/event -> Vercel KV), /api/stats digest -->
 <!--
   Puppy Wings v4 — angel puppy protagonist + bone-catching bonus — a reskin of "flappy-modern" by mf4633 (https://github.com/mf4633/flappy-modern)
   Original licensed under the MIT License. This reskin keeps the same license.
@@ -14,6 +14,7 @@
   v4.8: difficulty select (easy/normal/hard), reachable-gate constraint (no impossible jumps), gentle gate bobbing on normal/hard, cuter synthesized SFX.
   v4.8.1: start screen decluttered — how-to collapsed behind a toggle, daily reward no longer auto-pops (red-dot badge on the button instead).
   v4.9.0: Telegram Analytics SDK wired (token pending from @DataChief_bot); share button now shares the t.me Mini App link (?startapp=share) so friends land inside Telegram.
+  v4.9.1: own analytics beacon (play/over/share/ad_click/ad_done/stars_click/stars_done -> /api/event -> Vercel KV); daily numbers via GET /api/stats?key=STATS_KEY. @DataChief_bot was unresponsive (/menu /doc got no reply), so its SDK stays a guarded no-op.
 -->
 <html lang="en">
 <head>
@@ -658,6 +659,18 @@ function initTgAnalytics() {
   ];
 
   const canvas = document.getElementById('game');
+
+  // --- Own analytics beacon (anonymous counters, see /api/event) ---
+  // Fire-and-forget POST; the server drops the event if KV isn't configured yet,
+  // so gameplay never depends on it. Daily numbers: GET /api/stats?key=... (STATS_KEY in Vercel env).
+  function trackEvent(e) {
+    try {
+      var payload = JSON.stringify({ e: e });
+      if (navigator.sendBeacon) navigator.sendBeacon('/api/event', payload);
+      else fetch('/api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function(){});
+    } catch (err) {}
+  }
+
   const ctx = canvas.getContext('2d');
   // Player character: circular crop of the embedded avatar (vector puppy is the fallback)
   const AVATAR_SRC = document.querySelector('.avatar-wrap img').src;
@@ -1226,6 +1239,7 @@ function initTgAnalytics() {
   }
 
   async function buyRevive() {
+    trackEvent('stars_click');
     reviveBtn.disabled = true;
     reviveBtn.textContent = 'Processing…';
     reviveHintEl.textContent = '';
@@ -1242,6 +1256,7 @@ function initTgAnalytics() {
       if (w && typeof w.openInvoice === 'function' && data.invoiceLink) {
         w.openInvoice(data.invoiceLink, (status) => {
           if (status === 'paid') {
+            trackEvent('stars_done');
             doRevive();
           } else {
             reviveBtn.disabled = false;
@@ -1297,7 +1312,7 @@ function initTgAnalytics() {
     adBtn.textContent = '广告播放中…';
     try {
       const res = await ctrl.show();
-      if (res && res.done) { doRevive(); return; }
+      if (res && res.done) { trackEvent('ad_done'); doRevive(); return; }
       reviveHintEl.textContent = '需要看完广告才能复活';
     } catch (err) {
       reviveHintEl.textContent = '广告加载失败，请稍后再试';
@@ -1322,6 +1337,7 @@ function initTgAnalytics() {
       adOverlay.classList.remove('on');
       adWatching = false;
       reviveHintEl.textContent = '预览模式：模拟广告已播放';
+      trackEvent('ad_done');
       doRevive();
     })();
   }
@@ -1376,6 +1392,7 @@ function initTgAnalytics() {
   }
 
   function startGame() {
+    trackEvent('play');
     ensureAudio();
     reset();
     state = STATE.PLAY;
@@ -1434,6 +1451,7 @@ function initTgAnalytics() {
 
   function finishGameOver() {
     if (state === STATE.OVER) return; // guard against double-taps
+    trackEvent('over');
     state = STATE.OVER;
     sfx.die();
     const isNewBest = score > best;
@@ -1570,7 +1588,7 @@ function initTgAnalytics() {
   againBtn.addEventListener('click', startGame);
   reviveBtn.addEventListener('click', buyRevive);
   ticketBtn.addEventListener('click', useTicketRevive);
-  adBtn.addEventListener('click', watchAdRevive);
+  adBtn.addEventListener('click', () => { trackEvent('ad_click'); watchAdRevive(); });
   dailyBtn.addEventListener('click', () => { renderDailyGrid(); showCard(dailyCard); });
   // v4.8.1 how-to toggle
   const howtoToggle = document.getElementById('howtoToggle');
@@ -1585,6 +1603,7 @@ function initTgAnalytics() {
   giveUpBtn.addEventListener('click', () => { hideCard(reviveCard); finishGameOver(); });
   const shareBtn = document.getElementById('shareBtn');
   shareBtn.addEventListener('click', () => {
+    trackEvent('share');
     const text = `I scored ${score} in Puppy Wings! Best combo x${comboBestEver}. Caught ${bonesCaught} space bones. Can you beat me?`;
     // Share the Telegram Mini App link (not the raw web URL) so friends land inside Telegram
     // with full functionality (Stars, initData). startapp=share marks share-driven arrivals.
