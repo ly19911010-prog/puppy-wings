@@ -34,17 +34,19 @@ module.exports = async (req, res) => {
     });
     if (!r.ok) throw new Error('kv ' + r.status);
     const data = await r.json();
+    // Upstash /pipeline returns a top-level array: [{result:...}, ...]
     const out = {};
     let i = 0;
     for (const day of dayList) {
       out[day] = {};
       for (const e of EVENTS) {
-        const v = data.result[i++];
+        const item = Array.isArray(data) ? data[i++] : null;
+        const v = item ? item.result : null;
         out[day][e] = v == null ? 0 : (parseInt(v, 10) || 0);
       }
     }
     res.status(200).json({ days: out });
   } catch (err) {
-    res.status(502).json({ error: 'kv read failed', detail: String((err && err.message) || err).slice(0, 300) });
+    res.status(502).json({ error: 'kv read failed' });
   }
 };
