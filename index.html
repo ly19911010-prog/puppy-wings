@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Puppy Wings v4.8.1 — og:image points to production vercel.app domain -->
+<!-- Puppy Wings v4.9.0 — og:image points to production vercel.app domain -->
 <!--
   Puppy Wings v4 — angel puppy protagonist + bone-catching bonus — a reskin of "flappy-modern" by mf4633 (https://github.com/mf4633/flappy-modern)
   Original licensed under the MIT License. This reskin keeps the same license.
@@ -13,6 +13,7 @@
   v4.7.1: BOT_TOKEN + AdsGram block wired for production; HMAC initData validation on /api/invoice.
   v4.8: difficulty select (easy/normal/hard), reachable-gate constraint (no impossible jumps), gentle gate bobbing on normal/hard, cuter synthesized SFX.
   v4.8.1: start screen decluttered — how-to collapsed behind a toggle, daily reward no longer auto-pops (red-dot badge on the button instead).
+  v4.9.0: Telegram Analytics SDK wired (token pending from @DataChief_bot); share button now shares the t.me Mini App link (?startapp=share) so friends land inside Telegram.
 -->
 <html lang="en">
 <head>
@@ -25,6 +26,19 @@
 <meta property="og:image" content="https://puppy-wings-gamer-creator.vercel.app/cover.jpg" />
 <meta property="og:description" content="Help the angel puppy flap through the crystal gates, grab stars, and catch bones! Tap to fly. How far can you get?" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!-- Telegram Mini Apps Analytics SDK (MIT) — token from @DataChief_bot; also required for Apps Center listing -->
+<script async src="https://tganalytics.xyz/index.js" onload="initTgAnalytics()" type="text/javascript"></script>
+<script>
+function initTgAnalytics() {
+  try {
+    var TGAN_TOKEN = 'PASTE_TGANALYTICS_TOKEN_HERE'; // paste token from @DataChief_bot
+    var TGAN_APP = 'PASTE_TGANALYTICS_APPNAME_HERE'; // identifier entered in @DataChief_bot
+    if (window.telegramAnalytics && TGAN_TOKEN.indexOf('PASTE_') !== 0) {
+      window.telegramAnalytics.init({ token: TGAN_TOKEN, appName: TGAN_APP });
+    }
+  } catch (e) { /* analytics must never break the game */ }
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet">
@@ -1572,7 +1586,9 @@
   const shareBtn = document.getElementById('shareBtn');
   shareBtn.addEventListener('click', () => {
     const text = `I scored ${score} in Puppy Wings! Best combo x${comboBestEver}. Caught ${bonesCaught} space bones. Can you beat me?`;
-    const page = location.href.split('?')[0];
+    // Share the Telegram Mini App link (not the raw web URL) so friends land inside Telegram
+    // with full functionality (Stars, initData). startapp=share marks share-driven arrivals.
+    const page = 'https://t.me/Puppywingbot/Play?startapp=share';
     const url = 'https://t.me/share/url?url=' + encodeURIComponent(page) + '&text=' + encodeURIComponent(text);
     // inside Telegram the t.me link must go through openTelegramLink; window.open may be blocked
     const w = window.Telegram && window.Telegram.WebApp;
