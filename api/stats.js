@@ -3,7 +3,7 @@
 // Guarded by the STATS_KEY env var: wrong/missing key -> 403. Keep the key out of the repo;
 // the daily digest cron holds it in its (private) job instructions.
 
-const EVENTS = ['play', 'over', 'share', 'ad_click', 'ad_done', 'stars_click', 'stars_done'];
+const EVENTS = ['play', 'over', 'share', 'ad_click', 'ad_done', 'stars_click', 'stars_done', 'daily_play', 'lb_view'];
 
 function shanghaiDay(offsetDays) {
   return new Date(Date.now() + 8 * 3600 * 1000 - offsetDays * 86400000).toISOString().slice(0, 10);
