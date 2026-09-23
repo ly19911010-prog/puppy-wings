@@ -13,7 +13,7 @@
 // The beacon is fire-and-forget from the game: this endpoint always returns 200
 // (ok:false when KV isn't configured yet), so gameplay never depends on it.
 
-const ALLOWED = new Set(['play', 'over', 'share', 'ad_click', 'ad_done', 'stars_click', 'stars_done']);
+const ALLOWED = new Set(['play', 'over', 'share', 'ad_click', 'ad_done', 'stars_click', 'stars_done', 'daily_play', 'lb_view']);
 
 // Light best-effort per-IP rate limit (same pattern as api/invoice.js).
 const RATE_WINDOW_MS = 60 * 1000;
