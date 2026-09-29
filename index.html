@@ -16,7 +16,7 @@
   v4.9.0: Telegram Analytics SDK wired (token pending from @DataChief_bot); share button now shares the t.me Mini App link (?startapp=share) so friends land inside Telegram.
   v4.9.1: own analytics beacon (play/over/share/ad_click/ad_done/stars_click/stars_done -> /api/event -> Vercel KV); daily numbers via GET /api/stats?key=STATS_KEY. @DataChief_bot was unresponsive (/menu /doc got no reply), so its SDK stays a guarded no-op.
   v5.0: de-template package for AdsGram clause 11 — global + daily leaderboards (/api/leaderboard -> Vercel KV, Telegram initData-verified identity), daily challenge mode (seeded RNG: same gates for everyone each day), 10 achievements with unlock toasts, player nicknames.
-  v6.1: crystal obstacle tiers (5 tiers by wave, same hitbox); v6.0: Starfall — core gameplay overhaul (AdsGram clause 11): flappy-tap replaced by free-flight catcher. Drag to fly, catch falling stars/bones/power orbs, dodge dark shards, 3 hearts, escalating waves, combo system. All v5.0 infrastructure retained.
+  v6.2: bones rarer (12%->6%) + new swiftbone (fast drifting bone, +6 stars); v6.1: crystal obstacle tiers (5 tiers by wave, same hitbox); v6.0: Starfall — core gameplay overhaul (AdsGram clause 11): flappy-tap replaced by free-flight catcher. Drag to fly, catch falling stars/bones/power orbs, dodge dark shards, 3 hearts, escalating waves, combo system. All v5.0 infrastructure retained.
 -->
 <html lang="en">
 <head>
@@ -862,7 +862,7 @@ function initTgAnalytics() {
 
   // --- Virtual resolution ---------------------------------------------------
   const VW = 480;
-  const GAME_VERSION = '6.1'; // crystal obstacle tiers (v6.0 Starfall overhaul kept)
+  const GAME_VERSION = '6.2'; // bone variety: rarer bones, new swiftbone (v6.1 crystals kept)
   const VH = 800;
   let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
 
@@ -1174,13 +1174,14 @@ function initTgAnalytics() {
   function spawnFall(fallV, waveT, wave) {
     // v6.0 starfall spawner. In daily mode rnd() is seeded: same sky for everyone.
     const shardW = Math.min(0.30, SHARD_W + waveT * 0.10);
-    const wGold = 0.015, wPower = 0.07, wBone = 0.12;
+    const wGold = 0.015, wPower = 0.07, wBone = 0.06, wSwift = 0.02;
     const r = rnd();
     let kind;
     if (r < wGold) kind = 'goldbone';
     else if (r < wGold + wPower) kind = 'power';
-    else if (r < wGold + wPower + wBone) kind = 'bone';
-    else if (r < wGold + wPower + wBone + shardW) kind = 'shard';
+    else if (r < wGold + wPower + wSwift) kind = 'swiftbone';
+    else if (r < wGold + wPower + wSwift + wBone) kind = 'bone';
+    else if (r < wGold + wPower + wSwift + wBone + shardW) kind = 'shard';
     else kind = 'star';
     const f = {
       x: 24 + rnd() * (VW - 48),
@@ -1197,6 +1198,10 @@ function initTgAnalytics() {
       f.power = pr < 0.12 ? 'heart' : ['magnet', 'shield', 'slow', 'double'][(rnd() * 4) | 0];
     }
     if (kind === 'shard') { f.vy *= 1.08; f.tier = shardTier(wave || 1); }
+    if (kind === 'swiftbone') {
+      f.vy *= 1.12;
+      f.drift = (rnd() < 0.5 ? -1 : 1) * (130 + rnd() * 90); // fast horizontal drift
+    }
     falling.push(f);
   }
 
@@ -1298,6 +1303,16 @@ function initTgAnalytics() {
       addPopup('+' + BONE_REWARD + '⭐', '#ffd28a');
       if (bonesCaught >= 10) unlockAch('bone10');
       burst(f.x, f.y, '#ffd28a', 8);
+    } else if (f.kind === 'swiftbone') {
+      score += 3 * dbl;
+      bonesCaught++;
+      bankCoins(6);
+      sfx.bone();
+      hud.textContent = score;
+      bumpHud(hud);
+      addPopup('疾风骨！+6⭐', '#7dd3fc');
+      if (bonesCaught >= 10) unlockAch('bone10');
+      burst(f.x, f.y, '#7dd3fc', 14);
     } else if (f.kind === 'goldbone') {
       score += 5 * dbl;
       bankCoins(10);
@@ -2192,6 +2207,10 @@ function initTgAnalytics() {
           f.x += Math.sin(f.wob) * 24 * dt;
           if (f.kind === 'shard' && f.tier === 2) f.x += Math.sin(f.wob * 1.7) * 46 * dt; // ice sways
           if (f.kind === 'shard' && f.tier === 3) f.rot = (f.rot || 0) + dt * 1.6;       // arcane spins
+          if (f.kind === 'swiftbone') {
+            f.x += f.drift * dt;
+            if (f.x < 24 || f.x > VW - 24) f.drift *= -1; // bounce off walls
+          }
           f.y += f.vy * dt;
           const rr = (f.kind === 'shard' ? SHARD_R : ITEM_R) + CATCH_R;
           const cdx = bird.x - f.x, cdy = bird.y - f.y;
@@ -3038,6 +3057,23 @@ function initTgAnalytics() {
     for (const f of falling) {
       if (f.kind === 'star') drawStarCoin(f.x, f.y + Math.sin(f.phase) * 3, ITEM_R, f.phase * 0.5, '#ffd93a');
       else if (f.kind === 'bone') drawBone(ctx, f.x, f.y, BONE_R * 0.8, f.wob);
+      else if (f.kind === 'swiftbone') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(125,211,252,.55)';
+        ctx.lineWidth = 3;
+        const dir = f.drift > 0 ? -1 : 1;
+        for (let tl = 1; tl <= 3; tl++) {
+          ctx.globalAlpha = 0.5 - tl * 0.13;
+          ctx.beginPath();
+          ctx.moveTo(f.x + dir * tl * 14, f.y - 4);
+          ctx.lineTo(f.x + dir * (tl * 14 + 10), f.y - 4);
+          ctx.moveTo(f.x + dir * tl * 14, f.y + 4);
+          ctx.lineTo(f.x + dir * (tl * 14 + 10), f.y + 4);
+          ctx.stroke();
+        }
+        ctx.restore();
+        drawBone(ctx, f.x, f.y, BONE_R * 0.85, f.wob);
+      }
       else if (f.kind === 'goldbone') {
         ctx.save();
         ctx.globalAlpha = 0.45 + 0.15 * Math.sin(f.phase * 2);
