@@ -16,7 +16,7 @@
   v4.9.0: Telegram Analytics SDK wired (token pending from @DataChief_bot); share button now shares the t.me Mini App link (?startapp=share) so friends land inside Telegram.
   v4.9.1: own analytics beacon (play/over/share/ad_click/ad_done/stars_click/stars_done -> /api/event -> Vercel KV); daily numbers via GET /api/stats?key=STATS_KEY. @DataChief_bot was unresponsive (/menu /doc got no reply), so its SDK stays a guarded no-op.
   v5.0: de-template package for AdsGram clause 11 — global + daily leaderboards (/api/leaderboard -> Vercel KV, Telegram initData-verified identity), daily challenge mode (seeded RNG: same gates for everyone each day), 10 achievements with unlock toasts, player nicknames.
-  v6.2: bones rarer (12%->6%) + new swiftbone (fast drifting bone, +6 stars); v6.1: crystal obstacle tiers (5 tiers by wave, same hitbox); v6.0: Starfall — core gameplay overhaul (AdsGram clause 11): flappy-tap replaced by free-flight catcher. Drag to fly, catch falling stars/bones/power orbs, dodge dark shards, 3 hearts, escalating waves, combo system. All v5.0 infrastructure retained.
+  v6.3: 10s min gap between bone spawns; v6.2: bones rarer + swiftbone; v6.1: crystal obstacle tiers (5 tiers by wave, same hitbox); v6.0: Starfall — core gameplay overhaul (AdsGram clause 11): flappy-tap replaced by free-flight catcher. Drag to fly, catch falling stars/bones/power orbs, dodge dark shards, 3 hearts, escalating waves, combo system. All v5.0 infrastructure retained.
 -->
 <html lang="en">
 <head>
@@ -862,7 +862,7 @@ function initTgAnalytics() {
 
   // --- Virtual resolution ---------------------------------------------------
   const VW = 480;
-  const GAME_VERSION = '6.2'; // bone variety: rarer bones, new swiftbone (v6.1 crystals kept)
+  const GAME_VERSION = '6.3'; // bone spawn cooldown 10s (v6.2 swiftbone kept)
   const VH = 800;
   let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
 
@@ -937,6 +937,7 @@ function initTgAnalytics() {
   const INVULN_AFTER_SHIELD = 0.7;   // brief grace after shield absorbs a hit
   const WAVE_DUR = 25;               // seconds per wave
   const BONUS_EVERY_TIME = 45;       // seconds between bonus rounds
+  const BONE_MIN_GAP = 10;             // min seconds between bone spawns (any kind)
 
   // Bonus round (whack-a-mole) constants
   const BONUS_EVERY = 12;            // gates between bonus rounds
@@ -1016,6 +1017,7 @@ function initTgAnalytics() {
   let maxWave = 1;
   let spawnTimer = 0;
   let bonusClock = 0;
+  let boneCooldown = 99;            // seconds since last bone spawn
   let timeSinceSpawn = 0;     // bonus-round spawn clock (legacy name kept)
   let noHitTime = 0;
   let deadTimer = 0;
@@ -1136,6 +1138,7 @@ function initTgAnalytics() {
     maxWave = 1;
     spawnTimer = 0.8;
     bonusClock = 0;
+    boneCooldown = 99;
     noHitTime = 0;
     shake = 0;
     flashAlpha = 0;
@@ -1183,6 +1186,11 @@ function initTgAnalytics() {
     else if (r < wGold + wPower + wSwift + wBone) kind = 'bone';
     else if (r < wGold + wPower + wSwift + wBone + shardW) kind = 'shard';
     else kind = 'star';
+    // bones are treats, not rain: enforce a minimum gap between bone spawns
+    if (kind === 'bone' || kind === 'swiftbone' || kind === 'goldbone') {
+      if (boneCooldown < BONE_MIN_GAP) kind = 'star';
+      else boneCooldown = 0;
+    }
     const f = {
       x: 24 + rnd() * (VW - 48),
       y: -30,
@@ -2186,6 +2194,7 @@ function initTgAnalytics() {
 
         // periodic bonus round (time-based)
         bonusClock += dt;
+        boneCooldown += dt;
         if (bonusClock >= BONUS_EVERY_TIME && !bonusActive) {
           bonusClock = 0;
           startBonus();
